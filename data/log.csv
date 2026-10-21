@@ -1,2 +1,3 @@
 made_at,origin,target,price,p10,p50,p90,up_share,model,source,actual,err_kronos,err_naive,dir_ok,in_band
 2026-10-21 12:30,2026-10-20 23:00:00,2026-10-21 23:00:00,83028.15,81807.45,82857.62,83557.11,0.433,NeoQuasar/Kronos-small,archive,,,,,
+2026-10-21 12:35,2026-10-21 11:00:00,2026-10-22 11:00:00,83500.01,81984.34,82891.19,83366.52,0.1,NeoQuasar/Kronos-small,data-api.binance.vision,,,,,
