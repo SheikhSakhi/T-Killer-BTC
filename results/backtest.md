@@ -19,4 +19,4 @@ naive baseline and the band is far too narrow. Not a tradeable edge yet.
 
 ## 180 windows
 
-Pending, will be added here.
+Run the `backtest` workflow from the Actions tab; output lands in `results/backtest-180w.json`.
