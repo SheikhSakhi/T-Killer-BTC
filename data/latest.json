@@ -1,20 +1,26 @@
 {
  "forecast": {
-  "made_at": "2026-10-21 12:35",
-  "origin": "2026-10-21 11:00:00",
-  "target": "2026-10-22 11:00:00",
-  "price": 83500.01,
-  "p10": 81984.34,
-  "p50": 82891.19,
-  "p90": 83366.52,
-  "up_share": 0.1,
+  "made_at": "2026-10-22 12:27",
+  "origin": "2026-10-21 23:00:00",
+  "target": "2026-10-22 23:00:00",
+  "price": 84093.42,
+  "p10": 82965.34,
+  "p50": 83550.01,
+  "p90": 84147.55,
+  "up_share": 0.133,
   "model": "NeoQuasar/Kronos-small",
-  "source": "data-api.binance.vision",
+  "source": "archive",
   "actual": "",
   "err_kronos": "",
   "err_naive": "",
   "dir_ok": "",
   "in_band": ""
  },
- "stats": null
+ "stats": {
+  "n": 1,
+  "dir_acc": 0.0,
+  "band_cov": 0.0,
+  "mae_k": 1235.8,
+  "mae_n": 1065.27
+ }
 }
