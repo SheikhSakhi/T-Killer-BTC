@@ -25,7 +25,8 @@ LOG_COLS = ["made_at", "origin", "target", "price", "p10", "p50", "p90", "up_sha
 
 def read_log():
     if os.path.exists(LOG):
-        return pd.read_csv(LOG)
+        # Result columns start empty; keep them as objects so bools and floats both fit
+        return pd.read_csv(LOG, dtype={c: object for c in LOG_COLS[10:]})
     return pd.DataFrame(columns=LOG_COLS)
 
 
