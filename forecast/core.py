@@ -34,8 +34,8 @@ def _frame(rows):
     for c in COLS:
         df[c] = pd.to_numeric(df[c])
     # data.binance.vision switched to microseconds in 2025; the REST API uses milliseconds
-    unit = np.where(df["open_time"] > 1e14, "us", "ms")
-    df["timestamps"] = [pd.to_datetime(v, unit=u) for v, u in zip(df["open_time"], unit)]
+    ms = np.where(df["open_time"] > 1e14, df["open_time"] // 1000, df["open_time"])
+    df["timestamps"] = pd.to_datetime(ms, unit="ms")
     return df
 
 
