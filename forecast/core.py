@@ -122,3 +122,21 @@ def forecast(df, end, samples):
         df_list=[xd] * samples, x_timestamp_list=[xt] * samples, y_timestamp_list=[yts] * samples,
         pred_len=HORIZON, T=1.0, top_p=0.9, sample_count=1, verbose=False)
     return np.array([p["close"].values for p in out])
+
+
+def forecast_many(df, ends, samples):
+    """Like forecast() for several windows at once: one batch of len(ends) * samples series.
+    Returns an array of shape (len(ends), samples, HORIZON)."""
+    step = pd.Timedelta(hours=1)
+    dfs, xts, yts = [], [], []
+    for end in ends:
+        x = df.iloc[end - LOOKBACK:end]
+        y = pd.Series([x["timestamps"].iloc[-1] + step * (i + 1) for i in range(HORIZON)])
+        xd, xt = x[FEATURES].reset_index(drop=True), x["timestamps"].reset_index(drop=True)
+        dfs += [xd] * samples
+        xts += [xt] * samples
+        yts += [y] * samples
+    out = predictor().predict_batch(
+        df_list=dfs, x_timestamp_list=xts, y_timestamp_list=yts,
+        pred_len=HORIZON, T=1.0, top_p=0.9, sample_count=1, verbose=False)
+    return np.array([p["close"].values for p in out]).reshape(len(ends), samples, HORIZON)

@@ -8,7 +8,7 @@ on:
         default: "180"
       samples:
         description: "Sampled paths per window"
-        default: "10"
+        default: "30"
 
 permissions:
   contents: write
@@ -44,10 +44,9 @@ jobs:
 
       - name: Backtest
         run: |
-          days=$(( ${{ inputs.windows }} + 25 ))
-          python forecast/backtest.py --days "$days" --windows ${{ inputs.windows }} \
-            --samples ${{ inputs.samples }} > "results/backtest-${{ inputs.windows }}w.json"
-          cat "results/backtest-${{ inputs.windows }}w.json"
+          python forecast/backtest.py --days $(( ${{ inputs.windows }} + 25 )) \
+            --windows ${{ inputs.windows }} --samples ${{ inputs.samples }} \
+            --out "results/backtest-${{ inputs.windows }}w-${{ inputs.samples }}s"
 
       - name: Commit
         run: |
