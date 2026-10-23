@@ -25,11 +25,20 @@ a = ap.parse_args()
 
 df, _ = core.load_candles(days=a.days)
 H = core.HORIZON
-ends = [e for e in range(len(df) - H, core.LOOKBACK, -H)][:a.windows][::-1]
+# Windows start at the 23:00 UTC candle so a resumed run picks the same windows.
+ends = [e for e in range(core.LOOKBACK, len(df) - H + 1)
+        if df["timestamps"].iloc[e - 1].hour == 23][-a.windows:]
 
-rows = []
-for i in range(0, len(ends), a.group):
-    chunk = ends[i:i + a.group]
+# Resume: windows already in the CSV from an earlier (possibly timed-out) run are reused.
+csv_path = a.out + "-windows.csv"
+done = pd.read_csv(csv_path) if os.path.exists(csv_path) else pd.DataFrame()
+rows = done.to_dict("records")
+seen = set(done["origin"]) if len(done) else set()
+todo = [e for e in ends if str(df["timestamps"].iloc[e - 1]) not in seen]
+print(f"{len(rows)} windows reused, {len(todo)} to run", file=sys.stderr, flush=True)
+
+for i in range(0, len(todo), a.group):
+    chunk = todo[i:i + a.group]
     fins = core.forecast_many(df, chunk, a.samples)[:, :, -1]
     for e, fin in zip(chunk, fins):
         last = df["close"].iloc[e - 1]
@@ -37,11 +46,11 @@ for i in range(0, len(ends), a.group):
                          actual=df["close"].iloc[e + H - 1], p50=float(np.median(fin)),
                          p10=float(np.percentile(fin, 10)), p90=float(np.percentile(fin, 90)),
                          up_share=float((fin > last).mean())))
-    print(f"{min(i + a.group, len(ends))}/{len(ends)}", file=sys.stderr, flush=True)
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    print(f"{len(rows)}/{len(ends)}", file=sys.stderr, flush=True)
 
-r = pd.DataFrame(rows)
+r = pd.DataFrame(rows).sort_values("origin").reset_index(drop=True)
 r["move"] = r.actual / r["last"] - 1
-r.to_csv(a.out + "-windows.csv", index=False)
 
 
 def trade_stats(mask, side):

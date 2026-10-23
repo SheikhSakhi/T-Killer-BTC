@@ -16,7 +16,7 @@ permissions:
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 340
+    timeout-minutes: 350
     env:
       KRONOS_COMMIT: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
     steps:
@@ -43,12 +43,15 @@ jobs:
           key: hf-kronos-small-v1
 
       - name: Backtest
+        # Stop before the job limit so partial results still get committed; rerun to resume.
+        timeout-minutes: 320
         run: |
           python forecast/backtest.py --days $(( ${{ inputs.windows }} + 25 )) \
             --windows ${{ inputs.windows }} --samples ${{ inputs.samples }} \
             --out "results/backtest-${{ inputs.windows }}w-${{ inputs.samples }}s"
 
       - name: Commit
+        if: always()
         run: |
           git config user.name "t-killer-bot"
           git config user.email "t-killer-bot@users.noreply.github.com"
