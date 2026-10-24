@@ -1,0 +1,44 @@
+{
+ "variants": 228,
+ "combos": 1812,
+ "trades_simulated": 273727,
+ "test_days": 365,
+ "settings": {
+  "t>=2.0": {
+   "trades": 49,
+   "win": 0.5918367346938775,
+   "avg_R": 0.13163192718757705,
+   "t_stat": 0.8812832413716277,
+   "total_R": 6.449964432191275,
+   "equity_mult": 1.0637934613003748,
+   "max_dd": -0.06790944889377482,
+   "days_with_candidates": 146,
+   "null_total_R_p95": 44.61180813969607,
+   "beats_null": false
+  },
+  "t>=2.5": {
+   "trades": 25,
+   "win": 0.6,
+   "avg_R": 0.04750144974832267,
+   "t_stat": 0.2480113437494451,
+   "total_R": 1.1875362437080668,
+   "equity_mult": 1.0108293667413317,
+   "max_dd": -0.04306435794345009,
+   "days_with_candidates": 80,
+   "null_total_R_p95": 30.1651429444761,
+   "beats_null": false
+  },
+  "t>=3.0": {
+   "trades": 12,
+   "win": 0.75,
+   "avg_R": 0.3670645178073024,
+   "t_stat": 1.4162648497419743,
+   "total_R": 4.404774213687629,
+   "equity_mult": 1.044485486744054,
+   "max_dd": -0.011450731837828632,
+   "days_with_candidates": 36,
+   "null_total_R_p95": 11.27403487096438,
+   "beats_null": false
+  }
+ }
+}

@@ -1,3 +1,5 @@
 vendor/
 .venv/
 __pycache__/
+cache/
+.env
