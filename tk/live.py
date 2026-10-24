@@ -8,6 +8,7 @@ One trade per UTC day, at most one open position, flat by config.FLAT_AT. Entrie
 today's plan (data/plan/latest.json) written by the nightly research run, using the same
 plan_entry() code as the backtest.
 """
+import hashlib
 import json
 import os
 import sys
@@ -230,6 +231,18 @@ def enter(x, s, c, e, eq, t):
 
 # ------------------------------------------------------------------ main
 
+def forward_review(s):
+    """Send Claude's daily review (data/review/latest.md) once, when it changes."""
+    path = os.path.join(ROOT, "data", "review", "latest.md")
+    if not os.path.exists(path):
+        return
+    text = open(path).read().strip()
+    key = hashlib.sha256(text.encode()).hexdigest()
+    if text and s.get("review_sent") != key and text != "No review yet.":
+        notify.send("🧠 T-Killer daily review", text)
+        s["review_sent"] = key
+
+
 def run():
     # paper mode follows the real market; exchange mode trades where its keys point
     x = Futures(testnet=False) if MODE == "paper" else Futures()
@@ -245,6 +258,7 @@ def run():
         log(f"new day, equity {eq:.2f}")
 
     check_closed(x, s)
+    forward_review(s)
 
     flat_at = pd.Timestamp(f"{day} {config.FLAT_AT}")
     if t >= flat_at and s["open"]:
