@@ -65,19 +65,32 @@ def _run(path, entry_i, side, entry, sl, tp, funding_rate):
 
 
 def trade(p, row, path):
-    """Return dict(side, R, entry_time) or None for one strategy on one session."""
-    if row["session"] != p["session"] or path is None or len(path["close"]) < 13:
+    """Backtest one strategy on one session: plan the entry, then walk the path to the exit."""
+    e = plan_entry(p, row, path)
+    if e is None:
+        return None
+    res = _run(path, e["i"], e["side"], e["entry"], e["sl"], e["tp"], row.get("funding", np.nan))
+    if res is None:
+        return None
+    return dict(side=e["side"], R=res[0], entry_time=path["time"][e["i"]])
+
+
+def plan_entry(p, row, path):
+    """Where and how a strategy enters in this session's path (possibly a partial live path).
+    Returns dict(i, side, entry, sl, tp) or None. Shared by the backtest and the live bot."""
+    if row["session"] != p["session"] or path is None or len(path["close"]) < 1:
         return None
     o0 = path["open"][0]
     fam = p["family"]
-    fr = row.get("funding", np.nan)
 
     if fam == "orb":
         if p["squeeze_max"] is not None and not (row["squeeze"] <= p["squeeze_max"]):
             return None
         n = p["or_min"] // 5
+        if len(path["close"]) <= n:
+            return None
         rh, rl = path["high"][:n].max(), path["low"][:n].min()
-        return _breakout(path, n, rh, rl, None, p, fr, sl_mode="range")
+        return _breakout(path, n, rh, rl, None, p, "range")
 
     if fam == "squeeze":
         if not (row["vol_pct"] <= p["vol_pct_max"]):
@@ -85,7 +98,7 @@ def trade(p, row, path):
         rh, rl = row["hi24"], row["lo24"]
         if not (rl < o0 < rh):
             return None
-        return _breakout(path, 0, rh, rl, row["atr_pct"], p, fr, sl_mode=p["sl"])
+        return _breakout(path, 0, rh, rl, row["atr_pct"], p, p["sl"])
 
     if fam == "funding":
         z = row["funding_z"]
@@ -93,29 +106,31 @@ def trade(p, row, path):
             return None
         crowd = 1 if z > 0 else -1          # positive funding: longs are crowded
         side = -crowd if p["mode"] == "fade" else crowd
-        return _market(path, side, row["atr_pct"] * p["atr_k"], p, fr)
+        return _market(path, side, row["atr_pct"] * p["atr_k"], p)
 
     if fam == "trend":
         r, b = row["ret24"], row.get("btc_ret24", np.nan)
         if not (abs(r) >= p["ret_min"]) or not (np.sign(b) == np.sign(r)):
             return None
-        return _market(path, int(np.sign(r)), row["atr_pct"] * p["atr_k"], p, fr)
+        return _market(path, int(np.sign(r)), row["atr_pct"] * p["atr_k"], p)
     return None
 
 
-def _market(path, side, stop_pct, p, fr):
+def _levels(i, side, entry, sl, p):
+    risk = abs(entry - sl) / entry
+    if not (MIN_STOP <= risk <= MAX_STOP):
+        return None
+    return dict(i=i, side=side, entry=entry, sl=sl, tp=entry + side * abs(entry - sl) * p["tp_r"])
+
+
+def _market(path, side, stop_pct, p):
     if not stop_pct == stop_pct:
         return None
     entry = path["open"][0]
-    sl = entry * (1 - side * stop_pct)
-    tp = entry * (1 + side * stop_pct * p["tp_r"])
-    res = _run(path, 0, side, entry, sl, tp, fr)
-    if res is None:
-        return None
-    return dict(side=side, R=res[0], entry_time=path["time"][0])
+    return _levels(0, side, entry, entry * (1 - side * stop_pct), p)
 
 
-def _breakout(path, start, rh, rl, atr_pct, p, fr, sl_mode):
+def _breakout(path, start, rh, rl, atr_pct, p, sl_mode):
     hi, lo = path["high"][start:], path["low"][start:]
     up, dn = hi > rh, lo < rl
     if not (up.any() or dn.any()):
@@ -135,8 +150,4 @@ def _breakout(path, start, rh, rl, atr_pct, p, fr, sl_mode):
         if not atr_pct == atr_pct:
             return None
         sl = entry * (1 - side * 2 * atr_pct)
-    tp = entry + side * abs(entry - sl) * p["tp_r"]
-    res = _run(path, i, side, entry, sl, tp, fr)
-    if res is None:
-        return None
-    return dict(side=side, R=res[0], entry_time=path["time"][i])
+    return _levels(i, side, entry, sl, p)

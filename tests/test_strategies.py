@@ -54,9 +54,22 @@ def test_stop_too_tight_is_rejected():
 
 def test_breakout_skips_when_both_sides_break_in_one_bar():
     p = path([100, 102], [100, 98])
-    assert st._breakout(p, 0, 101, 99, None, dict(tp_r=1.0), 0.0, "range") is None
+    assert st._breakout(p, 0, 101, 99, None, dict(tp_r=1.0), "range") is None
 
 
 def test_grid_ids_unique():
     ids = [g["id"] for g in st.grid()]
     assert len(ids) == len(set(ids))
+
+
+def test_plan_entry_matches_backtest_entry():
+    row = dict(session="europe", squeeze=0.5, funding=0.0)
+    prm = dict(family="orb", session="europe", or_min=30, tp_r=2.0, squeeze_max=None)
+    highs = [100.5] * 6 + [100.6, 101.2, 102.0, 103.5]
+    lows = [99.5] * 6 + [100.0, 100.4, 100.9, 101.5]
+    p = path(highs, lows, opens=[100] * 10)
+    e = st.plan_entry(prm, row, p)
+    assert e["side"] == 1 and e["i"] == 6 and e["entry"] == 100.5 and e["sl"] == 99.5
+    # a live path that ends on the trigger bar plans the same entry
+    live = {k: v[:7] for k, v in p.items()}
+    assert st.plan_entry(prm, row, live) == e

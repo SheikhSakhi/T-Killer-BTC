@@ -1,8 +1,6 @@
 name: daily-forecast
 
 on:
-  schedule:
-    - cron: "7 0 * * *"   # 00:07 UTC, right after the daily candle closes
   workflow_dispatch:
 
 permissions:

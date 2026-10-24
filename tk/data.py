@@ -113,3 +113,33 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------- incremental updates (server)
+
+def update(sym, client):
+    """Append archive days since the cache ends, then the last hours from the live API."""
+    for kind, interval in (("5m", "5m"), ("1h", "1h")):
+        old = load(kind, sym)
+        start = old.index[-1].normalize().date()
+        days = [(start + timedelta(days=i)).isoformat() for i in range(1, (date.today() - start).days)]
+        urls = [f"{BASE}/daily/klines/{sym}/{interval}/{sym}-{interval}-{d}.zip" for d in days]
+        parts = [p for p in map(_zip_csv, urls) if p is not None]
+        new = [old]
+        if parts:
+            df = pd.concat([p.set_axis(KCOLS, axis=1) for p in parts])
+            df["time"] = _ms(df["open_time"])
+            new.append(df.set_index("time")[old.columns].astype(float))
+        new.append(client.klines(sym, interval, limit=1000 if kind == "5m" else 200)[old.columns])
+        out = pd.concat(new)
+        out[~out.index.duplicated(keep="last")].sort_index().to_parquet(path(kind, sym))
+
+    f = load("funding", sym)["last_funding_rate"]
+    f = pd.concat([f, client.funding_history(sym, 200)])
+    f[~f.index.duplicated(keep="last")].sort_index().to_frame("last_funding_rate").to_parquet(path("funding", sym))
+
+    m = load("metrics", sym)
+    recent = pd.DataFrame({"sum_open_interest_value": client.oi_history(sym),
+                           "sum_toptrader_long_short_ratio": client.top_ls_history(sym)})
+    m = pd.concat([m, recent])
+    m[~m.index.duplicated(keep="last")].sort_index().to_parquet(path("metrics", sym))

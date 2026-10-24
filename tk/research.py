@@ -59,9 +59,8 @@ def run_trades():
 
 # ---------------------------------------------------------------- selection
 
-def select_day(M, d, train=90, gap_val=30, t_req=2.5, min_train=15, min_val=5, min_coins=3):
-    """Champion candidates for day index d using only rows < d.
-    M: DataFrame days x (variant, sym) of R (NaN = no trade). Returns ranked list of columns."""
+def candidate_table(M, d, train=90, gap_val=30, t_req=2.0, min_train=15, min_val=5, min_coins=3):
+    """Stats for every (variant, sym) using only rows < d, with a pass flag for the guards."""
     tr = M.iloc[max(0, d - gap_val - train):d - gap_val]
     va = M.iloc[d - gap_val:d]
     n_tr, mu_tr, sd_tr = tr.count(), tr.mean(), tr.std()
@@ -72,8 +71,15 @@ def select_day(M, d, train=90, gap_val=30, t_req=2.5, min_train=15, min_val=5, m
     pos = (mu_tr > 0).groupby(level="variant").sum()
     robust = M.columns.get_level_values("variant").map(pos) >= min_coins
     ok &= pd.Series(np.asarray(robust), index=M.columns)
-    cand = t_tr[ok].sort_values(ascending=False)
-    return list(cand.index)
+    tab = pd.DataFrame({"n_train": n_tr, "mean_train": mu_tr, "t_train": t_tr, "n_val": n_va,
+                        "mean_val": mu_va, "ok": ok})
+    return tab.sort_values("t_train", ascending=False)
+
+
+def select_day(M, d, **kw):
+    """Champion candidates for day index d using only rows < d, best first."""
+    tab = candidate_table(M, d, **kw)
+    return list(tab.index[tab["ok"]])
 
 
 def walk_forward(M, test_days=365, T=None, top_k=10, **kw):

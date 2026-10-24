@@ -17,3 +17,7 @@ MAX_LEVERAGE = 3
 MAX_OPEN = 1
 DAILY_LOSS_STOP = 0.03
 TOTAL_DRAWDOWN_STOP = 0.25
+
+# Selection guards (see tk/research.py: candidate_table)
+SELECT = dict(train=90, gap_val=30, t_req=2.0, min_train=15, min_val=5, min_coins=3)
+TOP_K = 10
