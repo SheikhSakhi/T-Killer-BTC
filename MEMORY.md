@@ -33,3 +33,4 @@ Read this first in every session. Newest entries at the bottom of each section.
 - Liquidation data (needs a websocket collector on the server).
 - Session-specific behaviour around funding settlements (08:00/16:00 UTC).
 - Better null: compare avg R per trade, not total R, since candidate counts differ.
+| 2026-10-26 | 10x "safe coin returns to entry within a week" (owner's idea) | rejected: 11–49% of entries liquidated in 7 days, walk-forward −18.4 margins; see results/lev10.md |
