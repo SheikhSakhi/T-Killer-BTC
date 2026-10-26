@@ -34,3 +34,4 @@ Read this first in every session. Newest entries at the bottom of each section.
 - Session-specific behaviour around funding settlements (08:00/16:00 UTC).
 - Better null: compare avg R per trade, not total R, since candidate counts differ.
 | 2026-10-26 | 10x "safe coin returns to entry within a week" (owner's idea) | rejected: 11–49% of entries liquidated in 7 days, walk-forward −18.4 margins; see results/lev10.md |
+| 2026-10-26 | Owner's corridor idea: band ≤9% for 10x; long from bottom third of corridors aged ≥14d, TP at top | promising, not proven: +9–11% of margin per trade in both halves, 8–12% liquidations, n=53, t≈1; shorts lose. results/corridor.md |
