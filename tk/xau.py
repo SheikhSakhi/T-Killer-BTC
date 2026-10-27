@@ -3,7 +3,10 @@
 python -m tk.xau [risk_usd]
 
 Rules (tested on XAUUSDT Dec 2025 - Oct 2026 and PAXGUSDT Mar 2025 - Oct 2026, see results/xau.md):
-- Direction: price above the 20-day average of daily closes -> LONG, below -> SHORT. Always one side.
+- Direction: majority vote of three signals (never a tie), see research/xau_factors.py:
+    price vs 20-day average, price vs 50-day average, and the US dollar (FRED broad index DTWEXBGS):
+    dollar down over 20 days -> gold LONG vote. The dollar value used is at least 9 days old, so the
+    rule never relies on data that was not yet published.
 - Stop 2%, target 4%, close after 7 days if neither is hit.
 - Size so that the stop loses `risk_usd` including fees; leverage only sets the margin.
 - Volatility: current daily sigma from the last 7 days of hourly returns, with ranges for 1 and 7 days.
@@ -80,12 +83,47 @@ def archive():
     return df
 
 
-def side_at(h, t):
-    """Rule direction at time t: last price vs 20-day average of completed daily closes."""
+DOLLAR_LAG = pd.Timedelta(days=9)
+_usd = None
+
+
+def dollar():
+    """FRED broad dollar index (daily values, published weekly); cached for a day."""
+    global _usd
+    if _usd is None:
+        path = os.path.join(ROOT, "cache", "macro", "fred_DTWEXBGS.csv")
+        if not os.path.exists(path) or (datetime.now().timestamp() - os.path.getmtime(path)) > 86400:
+            try:
+                r = requests.get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTWEXBGS", timeout=30)
+                r.raise_for_status()
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                open(path, "w").write(r.text)
+            except Exception:
+                pass
+        if os.path.exists(path):
+            s = pd.read_csv(path, na_values=".")
+            s.columns = ["date", "v"]
+            _usd = s.dropna().assign(date=lambda d: pd.to_datetime(d["date"])).set_index("date")["v"]
+        else:
+            _usd = pd.Series(dtype=float)
+    return _usd
+
+
+def side_at(h, t, usd=None):
+    """Rule direction at time t: majority of trend20, trend50 and the 20-day dollar change."""
     daily = h["close"][h.index < t.normalize()].resample("1D").last().dropna()
-    sma = daily.iloc[-20:].mean()
     px = h["close"][h.index <= t].iloc[-1]
-    return (1 if px > sma else -1), px, sma
+    sma20, sma50 = daily.iloc[-20:].mean(), daily.iloc[-50:].mean()
+    votes = {"trend20": 1 if px > sma20 else -1}
+    if len(daily) >= 50:
+        votes["trend50"] = 1 if px > sma50 else -1
+    if usd is not None:
+        u = usd[usd.index <= t - DOLLAR_LAG]
+        if len(u) > 21:
+            votes["dollar"] = -1 if u.iloc[-1] > u.iloc[-21] else 1
+    total = sum(votes.values())
+    side = int(np.sign(total)) if total != 0 else votes["trend20"]
+    return side, px, sma20, dict(votes, sma50=sma50, usd_chg=(u.iloc[-1] / u.iloc[-21] - 1) if usd is not None and len(u) > 21 else None)
 
 
 def simulate(h, t0, side, entry):
@@ -105,10 +143,10 @@ def simulate(h, t0, side, entry):
 
 def history_stats(h):
     """Non-overlapping replay of the rule (decisions at 00:00 UTC) on the full history."""
-    t = h.index[0].normalize() + pd.Timedelta(days=21)
+    t = h.index[0].normalize() + pd.Timedelta(days=51)
     res = []
     while t < h.index[-1] - pd.Timedelta(hours=HOLD_H):
-        side, px, _ = side_at(h, t)
+        side, px, _, _ = side_at(h, t, dollar())
         out, r, end = simulate(h, t, side, px)
         res.append(r - FEE)
         t = (end + pd.Timedelta(hours=1)).ceil("D") if end is not None else t + pd.Timedelta(days=1)
@@ -144,7 +182,7 @@ def main(risk_usd=1000.0):
     except Exception:
         full = h
     now = h.index[-1] + pd.Timedelta(hours=1)
-    side, px, sma = side_at(full, now)
+    side, px, sma, v = side_at(full, now, dollar())
     lr = np.log(full["close"]).diff()
     sig_d = float(lr.iloc[-168:].std() * np.sqrt(24))
     sig_w = sig_d * np.sqrt(7)
@@ -179,8 +217,12 @@ def main(risk_usd=1000.0):
         f"  Итог:    стоп ≈ −{risk_usd:,.0f} $ · тейк ≈ +{notional * (TP - FEE):,.0f} $",
         f"  Ликвидация {LEV}x ≈ {liq:,.2f} (стоп сработает раньше)",
         "",
-        f"ПОЧЕМУ {word}: цена {px:,.2f} {'выше' if side > 0 else 'ниже'} 20-дневной средней {sma:,.2f} "
-        f"на {abs(px / sma - 1):.1%}. Последние 5 закрытий дня: {', '.join(f'{x:,.0f}' for x in d20.iloc[-6:-1])}",
+        f"ПОЧЕМУ {word} (2 из 3 голосов решают):",
+        f"  Тренд 20 дней:  {'ЛОНГ' if v['trend20'] > 0 else 'ШОРТ'} (цена {'выше' if v['trend20'] > 0 else 'ниже'} средней {sma:,.0f})",
+        (f"  Тренд 50 дней:  {'ЛОНГ' if v['trend50'] > 0 else 'ШОРТ'} (средняя {v['sma50']:,.0f})" if "trend50" in v else "  Тренд 50 дней:  нет данных"),
+        (f"  Доллар 20 дней: {'ЛОНГ' if v['dollar'] > 0 else 'ШОРТ'} (индекс доллара {v['usd_chg']:+.1%}: "
+         f"{'дешевеет → золото вверх' if v['dollar'] > 0 else 'дорожает → золото вниз'})" if "dollar" in v else "  Доллар: нет данных"),
+        f"  Последние 5 закрытий дня: {', '.join(f'{x:,.0f}' for x in d20.iloc[-6:-1])}",
         "",
         "ВОЛАТИЛЬНОСТЬ (из движения последних 7 дней):",
         f"  За 1 день обычно ±{sig_d:.1%} (±{px * sig_d:,.0f} $ цены): от {px * (1 - sig_d):,.0f} до {px * (1 + sig_d):,.0f}",
@@ -200,8 +242,14 @@ def main(risk_usd=1000.0):
                         if len(closed) else "результатов ещё нет"))
     lines += ["", "Правило механическое и не доказано статистически: ~6 из 10 сделок закрываются стопом, "
               "плюс даёт то, что тейк вдвое больше стопа. Сверьте цену с Binance перед входом."]
-    print("\n".join(x for x in lines if x is not None))
+    text = "\n".join(x for x in lines if x is not None)
+    print(text)
+    return text
 
 
 if __name__ == "__main__":
-    main(float(sys.argv[1]) if len(sys.argv) > 1 else 1000.0)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    report = main(float(args[0]) if args else float(os.environ.get("XAU_RISK_USD", 1000)))
+    if "--notify" in sys.argv:
+        from tk import notify
+        notify.send(report.split("\n")[2].replace("РЕШЕНИЕ: ", "🥇 XAUUSDT: "), report)

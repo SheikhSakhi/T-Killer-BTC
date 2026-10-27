@@ -101,8 +101,27 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 UNIT
+sudo tee /etc/systemd/system/tk-xau.service >/dev/null <<UNIT
+[Unit]
+Description=T-Killer XAUUSDT daily analysis to Telegram and email
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$DIR
+ExecStart=/bin/bash -c 'set -a; source .env; set +a; .venv/bin/python -m tk.xau --notify; git add data/xau; git -c user.name=t-killer-bot -c user.email=t-killer-bot@users.noreply.github.com commit -qm "xau $(date -u +%%F)" && git push -q origin main || true'
+TimeoutStartSec=600
+UNIT
+sudo tee /etc/systemd/system/tk-xau.timer >/dev/null <<UNIT
+[Unit]
+Description=XAUUSDT analysis every day at 00:05 UTC (05:05 Almaty)
+[Timer]
+OnCalendar=*-*-* 00:05:00
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
 sudo systemctl daemon-reload
-sudo systemctl enable --now tk-live.timer tk-daily.timer
+sudo systemctl enable --now tk-live.timer tk-daily.timer tk-xau.timer
 systemctl list-timers 'tk-*' --no-pager
 
 echo
