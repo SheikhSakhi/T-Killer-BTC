@@ -8,6 +8,14 @@ A small-stake (40 USDT) Binance USD-M futures system. The server (Oracle VM, Fra
   `tk/config.py` (SELECT), writes `data/plan/latest.json`, `LATEST.md`, `results/daily.json`.
 The server pushes its logs here: `data/live/trades.csv`, `data/live/events.log`, `data/live/state.json`.
 
+## XAUUSDT request ("XAU", "золото", "XAUUSDT", "что по золоту")
+Run `python -m tk.xau <risk_usd>` (default risk 1000; use the owner's number if given) after
+`pip install -q -r requirements-tk.txt` if pandas is missing. Relay its output in Russian as is:
+one decision (LONG or SHORT) with entry, stop, target, size, volatility ranges and the track record.
+Do not add "or" alternatives and do not override the rule with your own view. If the price source
+is "testnet", say the owner should check the entry against the real Binance price. Commit the
+updated `data/xau/signals.csv` so the live record keeps accumulating.
+
 ## Quick question from the owner ("что по рынку", "какое движение", "что сегодня")
 Read `LATEST.md` only and answer in Russian, briefly. Do not run anything. If `LATEST.md` is
 older than 36 hours, say the nightly job probably failed and point to the server logs.
