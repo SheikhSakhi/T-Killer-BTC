@@ -211,32 +211,6 @@ def main(risk_usd=1000.0):
         new.to_csv(LOG, mode="a", header=not os.path.exists(LOG), index=False)
     live = score_log(full)
 
-    if active is not None:
-        a_side = int(active["side"])
-        a_word = "ЛОНГ" if a_side > 0 else "ШОРТ"
-        a_qty = notional / float(active["price"])
-        left = HOLD_H - int((now - pd.Timestamp(active["time"])) / pd.Timedelta(hours=1))
-        hold = [
-            f"XAUUSDT — {now:%Y-%m-%d %H:%M} UTC (источник цен: {src})",
-            "",
-            f"РЕШЕНИЕ: ДЕРЖАТЬ {a_word} от {pd.Timestamp(active['time']):%d.%m %H:%M} UTC. Новую сделку не открывать.",
-            f"  Вход:    {float(active['price']):,.2f}",
-            f"  Стоп:    {float(active['stop']):,.2f}   (не двигать)",
-            f"  Тейк:    {float(active['target']):,.2f}   (не двигать)",
-            f"  Сейчас:  {px:,.2f} → {active['result']:+.2%} цены ≈ {active['result'] * notional:+,.0f} $ при позиции {notional:,.0f} $",
-            f"  Время:   осталось ~{max(left, 0) // 24} дн {max(left, 0) % 24} ч; потом закрыть по рынку",
-            "",
-            f"Голоса сегодня: тренд20 {'ЛОНГ' if v['trend20'] > 0 else 'ШОРТ'}, "
-            f"тренд50 {'ЛОНГ' if v.get('trend50', 0) > 0 else 'ШОРТ'}, доллар {'ЛОНГ' if v.get('dollar', 0) > 0 else 'ШОРТ'} "
-            f"→ {'подтверждают' if side == a_side else 'против'} открытую сделку. Правило держит сделку до стопа, тейка или 7 дней.",
-            f"Волатильность: за день ±{sig_d:.1%} ({px * (1 - sig_d):,.0f}–{px * (1 + sig_d):,.0f}), за 7 дней ±{sig_w:.1%}",
-            "",
-            f"ИСТОРИЯ ПРАВИЛА: {hs['n']} сделок, прибыльных {hs['win']:.0%}, в среднем {hs['avg_R']:+.2f} от риска",
-        ]
-        text = "\n".join(hold)
-        print(text)
-        return text
-
     word = "ЛОНГ" if side > 0 else "ШОРТ"
     lines = [
         f"XAUUSDT — {now:%Y-%m-%d %H:%M} UTC (источник цен: {src})",
@@ -273,6 +247,11 @@ def main(risk_usd=1000.0):
         lines.append(f"ЖИВОЙ ЖУРНАЛ: {len(live)} сигналов, закрыто {len(closed)}, "
                      + (f"прибыльных {np.mean(closed['R'] > 0):.0%}, сумма {closed['R'].sum():+.1f} от риска"
                         if len(closed) else "результатов ещё нет"))
+    if active is not None:
+        lines += ["", f"БУМАЖНЫЙ ЖУРНАЛ: сделка правила от {pd.Timestamp(active['time']):%d.%m %H:%M} UTC "
+                  f"({'ЛОНГ' if int(active['side']) > 0 else 'ШОРТ'} {float(active['price']):,.2f}, стоп {float(active['stop']):,.2f}, "
+                  f"тейк {float(active['target']):,.2f}) ещё открыта: {active['result']:+.2%}. "
+                  "Если вы в ней, держите её уровни и не входите второй раз."]
     lines += ["", "Правило механическое и не доказано статистически: ~6 из 10 сделок закрываются стопом, "
               "плюс даёт то, что тейк вдвое больше стопа. Сверьте цену с Binance перед входом."]
     text = "\n".join(x for x in lines if x is not None)
