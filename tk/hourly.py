@@ -48,6 +48,19 @@ NAMES = {
     "vol24": "волатильность за 24 ч",
 }
 FEATS = list(NAMES)
+# Live features built from the minute collector (tk/collect.py). No archive history exists for them:
+# they stay neutral (weight 0, input 0) until enough live hours exist, then the model learns their weights.
+LIVE_NAMES = {
+    "lf_flow": "живой поток: чистые агрессивные покупки за час", "lf_flow15": "живой поток за последние 15 мин",
+    "lf_big": "крупные сделки (≥50k$): чистые покупки", "lf_book5": "стакан, 5 ближних уровней: перевес покупок",
+    "lf_book5_chg": "стакан, 5 уровней: изменение перевеса за час", "lf_liq": "ликвидации: шортов минус лонгов",
+    "lf_spread": "спред", "lf_flow_corr": "насколько поток двигал цену в этот час",
+}
+LIVE_FEATS = list(LIVE_NAMES)
+NAMES.update(LIVE_NAMES)
+ALL = FEATS + LIVE_FEATS
+MIN_DIR = os.path.join(ROOT, "cache", "minutes")
+LIVE_READY = 48     # live hours needed before live inputs are scaled and start to count
 
 
 # ------------------------------------------------------------------ data
@@ -75,6 +88,88 @@ def features(R):
     X["ret1"], X["ret4"], X["ret24"] = c.pct_change(1), c.pct_change(4), c.pct_change(24)
     X["vol24"] = np.log(c).diff().rolling(24).std()
     return X.replace([np.inf, -np.inf], np.nan)
+
+
+def load_minutes(start, end):
+    """Minute rows from the live collector between start and end (UTC, naive)."""
+    days = pd.date_range(pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize(), freq="D")
+    parts = [pd.read_csv(os.path.join(MIN_DIR, f"{d.date()}.csv")) for d in days
+             if os.path.exists(os.path.join(MIN_DIR, f"{d.date()}.csv"))]
+    if not parts:
+        return pd.DataFrame()
+    m = pd.concat(parts)
+    m["minute"] = pd.to_datetime(m["minute"])
+    m = m.drop_duplicates("minute").set_index("minute").sort_index()
+    return m[(m.index >= start) & (m.index < end)]
+
+
+def _hour_live(mm):
+    """Live features of one hour from its minute rows (needs 45+ minutes)."""
+    if len(mm) < 45:
+        return None
+    tot = mm["buy_usd"] + mm["sell_usd"]
+    net = mm["buy_usd"] - mm["sell_usd"]
+    last15 = mm.tail(15)
+    ret = mm["close"].pct_change()
+    flow = net / tot.replace(0, np.nan)
+    corr = ret.corr(flow) if ret.std() > 0 and flow.std() > 0 else 0.0
+    return dict(lf_flow=net.sum() / tot.sum() if tot.sum() else 0.0,
+                lf_flow15=(last15["buy_usd"] - last15["sell_usd"]).sum() / max((last15["buy_usd"] + last15["sell_usd"]).sum(), 1),
+                lf_big=(mm["big_buy_usd"] - mm["big_sell_usd"]).sum() / max(tot.sum(), 1),
+                lf_book5=mm["book5_imb"].mean(), lf_book5_chg=mm["book5_imb_end"].iloc[-1] - mm["book5_imb_end"].iloc[0],
+                lf_liq=(mm["liq_short_usd"] - mm["liq_long_usd"]).sum() / max(tot.sum(), 1),
+                lf_spread=(mm["spread"] / mm["close"]).mean(), lf_flow_corr=corr)
+
+
+def live_features(index):
+    """Hourly live features for the given bar-open times (NaN where the collector has no data)."""
+    out = pd.DataFrame(np.nan, index=index, columns=LIVE_FEATS)
+    if not os.path.isdir(MIN_DIR) or not len(index):
+        return out
+    mins = load_minutes(index[0], index[-1] + pd.Timedelta(hours=1))
+    if mins.empty:
+        return out
+    for t, mm in mins.groupby(mins.index.floor("h")):
+        if t in out.index:
+            f = _hour_live(mm)
+            if f:
+                out.loc[t] = [f[c] for c in LIVE_FEATS]
+    return out
+
+
+def hour_drivers(t):
+    """What actually moved the price inside hour bar t, minute by minute (live collector data)."""
+    mm = load_minutes(t, t + pd.Timedelta(hours=1))
+    if len(mm) < 30:
+        return None
+    ret = mm["close"].pct_change()
+    tot = mm["buy_usd"] + mm["sell_usd"]
+    series = {
+        "агрессивные покупки минус продажи": (mm["buy_usd"] - mm["sell_usd"]) / tot.replace(0, np.nan),
+        "крупные сделки (чистые покупки)": mm["big_buy_usd"] - mm["big_sell_usd"],
+        "перевес стакана (5 уровней)": mm["book5_imb"],
+        "изменение перевеса стакана": mm["book5_imb_end"].diff(),
+        "изменение открытого интереса": mm["oi"].pct_change(),
+        "ликвидации шортов минус лонгов": mm["liq_short_usd"] - mm["liq_long_usd"],
+        "премия фьючерса": mm["premium"],
+    }
+    rows = []
+    for name, x in series.items():
+        same = ret.corr(x) if x.std() > 0 and ret.std() > 0 else np.nan
+        lead = ret.corr(x.shift(1)) if x.std() > 0 and ret.std() > 0 else np.nan
+        rows.append((name, same, lead))
+    oi = mm["oi"].dropna()
+    return dict(minutes=len(mm), rows=sorted(rows, key=lambda r: -abs(r[1]) if r[1] == r[1] else 0),
+                net_usd=float((mm["buy_usd"] - mm["sell_usd"]).sum()), vol_usd=float(tot.sum()),
+                big_net=float((mm["big_buy_usd"] - mm["big_sell_usd"]).sum()),
+                liq_long=float(mm["liq_long_usd"].sum()), liq_short=float(mm["liq_short_usd"].sum()),
+                book_start=float(mm["book5_imb_end"].iloc[0]), book_end=float(mm["book5_imb_end"].iloc[-1]),
+                oi_chg=float(oi.iloc[-1] / oi.iloc[0] - 1) if len(oi) > 1 and oi.iloc[0] else np.nan,
+                hi=float(mm["high"].max()), lo=float(mm["low"].min()))
+
+
+def features_all(R):
+    return features(R).join(live_features(R.index))
 
 
 def build_raw_from_archive():
@@ -159,20 +254,39 @@ def fit(Z, y, w=None, b=0.0, steps=400, lr=0.1):
     return w, b
 
 
+def usable(X):
+    return X[FEATS].notna().mean(axis=1) >= 0.8
+
+
 def init_model(X, y):
-    ok = y.notna() & (X.notna().mean(axis=1) >= 0.8)
+    X = X.reindex(columns=ALL)
+    ok = y.notna() & usable(X)
     Xo, yo = X[ok], y[ok]
-    mu, sd = Xo.mean(), Xo.std().replace(0, 1)
+    mu, sd = Xo.mean().fillna(0.0), Xo.std().replace(0, 1).fillna(1.0)
     Z = ((Xo - mu) / sd).fillna(0).values
     w, b = fit(Z, yo.values)
-    return dict(features=FEATS, mu=mu.tolist(), sd=sd.tolist(), w=w.tolist(), b=b, w0=w.tolist(), b0=b,
-                trained_until=str(Xo.index[-1]), updates=0, w_history=[])
+    return dict(features=ALL, mu=mu.tolist(), sd=sd.tolist(), w=w.tolist(), b=b, w0=w.tolist(), b0=b,
+                trained_until=str(Xo.index[-1]), updates=0, w_history=[], live_hours=0)
+
+
+def scale_live(m, X):
+    """Once enough live hours exist, scale live inputs by their own live history."""
+    live = X[LIVE_FEATS].dropna(how="all")
+    m["live_hours"] = int(len(live))
+    if len(live) >= LIVE_READY:
+        mu, sd = np.array(m["mu"]), np.array(m["sd"])
+        k = len(FEATS)
+        mu[k:] = live.mean().fillna(0).values
+        sd[k:] = live.std().replace(0, 1).fillna(1).values
+        m["mu"], m["sd"] = mu.tolist(), sd.tolist()
 
 
 def zrow(m, x):
     """Standardised inputs; a missing input counts as neutral (0 = its historical average)."""
-    z = (np.asarray(x, float) - np.array(m["mu"])) / np.array(m["sd"])
-    return np.nan_to_num(z, nan=0.0)
+    z = np.nan_to_num((np.asarray(x, float) - np.array(m["mu"])) / np.array(m["sd"]), nan=0.0)
+    if m.get("live_hours", 0) < LIVE_READY:
+        z[len(FEATS):] = 0.0          # live inputs stay neutral until they have been scaled
+    return z
 
 
 def _window_stats(Z, yy, w, b):
@@ -185,8 +299,8 @@ def learn(m, X, y, t):
     """Online update on the newly labelled hour t plus a replay of the previous 7 days.
     Returns what training did: window size, error and accuracy on the window before/after, weight changes."""
     w_before, b_before = np.array(m["w"]), m["b"]
-    win = X.loc[:t].tail(REPLAY_H)
-    ok = y.reindex(win.index).notna() & (win.notna().mean(axis=1) >= 0.8)
+    win = X.reindex(columns=ALL).loc[:t].tail(REPLAY_H)
+    ok = y.reindex(win.index).notna() & usable(win)
     Z = np.array([zrow(m, r) for r in win[ok].values])
     yy = y.reindex(win.index)[ok].values
     if len(yy) < 24:
@@ -194,17 +308,10 @@ def learn(m, X, y, t):
     before = _window_stats(Z, yy, w_before, b_before)
     w, b = fit(Z, yy, w_before, b_before, steps=EPOCHS * 10, lr=LR)
     after = _window_stats(Z, yy, w, b)
-    # re-analysis of the recent past with the new model vs the old one (same hours, same inputs)
-    Zr, yr, tr = Z[-24:], yy[-24:], win[ok].index[-24:]
-    old_p, new_p = sigmoid(Zr @ w_before + b_before), sigmoid(Zr @ w + b)
-    flips = [dict(t=str(tt), y=int(yv), old=float(po), new=float(pn)) for tt, yv, po, pn in zip(tr, yr, old_p, new_p)
-             if (po >= 0.5) != (pn >= 0.5)]
-    recheck = dict(acc_old=float(np.mean((old_p >= 0.5) == (yr == 1))), acc_new=float(np.mean((new_p >= 0.5) == (yr == 1))),
-                   last=dict(t=str(tr[-1]), y=int(yr[-1]), old=float(old_p[-1]), new=float(new_p[-1])), flips=flips)
     m["w"], m["b"], m["updates"] = w.tolist(), float(b), m["updates"] + 1
     m["w_history"] = (m["w_history"] + [dict(t=str(t), w=[round(v, 4) for v in w])])[-24 * 30:]
     return dict(n=len(yy), up_share=float(yy.mean()), before=before, after=after, dw=w - w_before,
-                w_before=w_before, b_before=b_before, recheck=recheck, skipped=False)
+                w_before=w_before, b_before=b_before, skipped=False)
 
 
 def predict(m, x, frozen=False):
@@ -235,95 +342,111 @@ def describe(name, v, pct):
            "top_ls_z": lambda v: f"{v:+.1f}σ", "glob_ls_z": lambda v: f"{v:+.1f}σ",
            "taker_ls4": lambda v: f"покупки/продажи {np.exp(v):.2f}", "prem": lambda v: f"{v * 1e4:+.1f} б.п.",
            "prem24": lambda v: f"{v * 1e4:+.1f} б.п.", "ret1": lambda v: f"{v:+.2%}", "ret4": lambda v: f"{v:+.2%}",
-           "ret24": lambda v: f"{v:+.2%}", "vol24": lambda v: f"{v:.2%} в час"}[name](v)
+           "ret24": lambda v: f"{v:+.2%}", "vol24": lambda v: f"{v:.2%} в час",
+           "lf_flow": lambda v: f"{v:+.1%} объёма", "lf_flow15": lambda v: f"{v:+.1%} объёма",
+           "lf_big": lambda v: f"{v:+.1%} объёма", "lf_book5": lambda v: f"{v:+.2f}", "lf_book5_chg": lambda v: f"{v:+.2f}",
+           "lf_liq": lambda v: f"{v:+.2%} объёма", "lf_spread": lambda v: f"{v * 1e4:.2f} б.п.",
+           "lf_flow_corr": lambda v: f"корреляция {v:+.2f}"}[name](v)
+    if pct != pct:
+        return fmt
     tag = " — необычно высоко" if pct >= 0.85 else " — необычно низко" if pct <= 0.15 else ""
     return f"{fmt} (выше {pct:.0%} часов за 30 дн){tag}"
 
 
-def report(log, m, L_info, x_next, pct_next, t_next, close_now, vol1h, prev_info):
-    """Email: what happened last hour and why, what training changed, draft vs final forecast, full breakdown."""
+def usd(x):
+    return f"{x / 1e6:+.2f} млн $" if abs(x) >= 1e6 else f"{x / 1e3:+.0f} тыс $"
+
+
+def report(log, m, L_info, x_next, pct_next, t_next, close_now, vol1h, prev_info, drivers):
+    """Email: forecast for the next hour first, then what was found in the last hour and what the model learned."""
     p, contrib = predict(m, x_next)
     pf, _ = predict(m, x_next, frozen=True)
     up = p >= 0.5
-    L = []
+    trained = L_info is not None and not L_info.get("skipped")
+    p_draft = float(sigmoid(zrow(m, x_next) @ L_info["w_before"] + L_info["b_before"])) if trained else None
     done = log.dropna(subset=["hit"])
-    p_draft = None
+    word = lambda q: "ВВЕРХ" if q >= 0.5 else "ВНИЗ"
+    conf = lambda q: f"{max(q, 1 - q):.1%}"
+
+    L = [f"ИТОГ: на {t_next:%H:00}–{t_next + pd.Timedelta(hours=1):%H:00} UTC {word(p)} {conf(p)}"
+         + (f" (до обучения на прошлом часе было {word(p_draft)} {conf(p_draft)})" if p_draft is not None else ""), ""]
+
+    # 1. forecast
+    L += [f"1. АНАЛИЗ НА СЛЕДУЮЩИЙ ЧАС {t_next:%H:00}–{t_next + pd.Timedelta(hours=1):%H:00} UTC",
+          f"   Прогноз: {word(p)} {conf(p)}"]
+    if p_draft is not None:
+        L.append(f"   Старой моделью (до обучения): {word(p_draft)} {conf(p_draft)} → новое знание сдвинуло вероятность роста на "
+                 f"{(p - p_draft) * 100:+.2f} п.п." + (" и ПЕРЕВЕРНУЛО направление" if (p_draft >= 0.5) != up else ""))
+    L.append(f"   Без всякого обучения (копия со дня запуска): {word(pf)} {conf(pf)}")
+    L.append(f"   Цена {close_now:,.2f}; обычный ход за час ±{vol1h:.2%} → {close_now * (1 - vol1h):,.2f}–{close_now * (1 + vol1h):,.2f}")
+    L.append("   Из чего сложился прогноз (вклад = значение × вес; плюс — за рост, минус — за падение):")
+    live_on = m.get("live_hours", 0) >= LIVE_READY
+    for i in np.argsort(-np.abs(contrib)):
+        f = ALL[i]
+        if f in LIVE_FEATS and not live_on:
+            continue
+        L.append(f"     {contrib[i]:+.3f}  {NAMES[f]}: {describe(f, x_next[i], pct_next[i])}")
+    L.append(f"     ─────\n     {contrib.sum() + m['b']:+.3f}  итог → вероятность роста {p:.1%}")
+    if not live_on:
+        L.append(f"   Живые минутные данные копятся: {m.get('live_hours', 0)} из {LIVE_READY} часов, после этого они войдут в прогноз.")
+    L.append("")
+
+    # 2. what was found in the last hour
     if prev_info is not None:
         r = done.iloc[-1]
-        right = bool(r["hit"])
-        L += [f"1. ПРОШЛЫЙ ЧАС {pd.Timestamp(r['hour']):%H:00}–{pd.Timestamp(r['hour']) + pd.Timedelta(hours=1):%H:00} UTC: "
-              f"прогноз {'ВВЕРХ' if r['p_up'] >= 0.5 else 'ВНИЗ'} {max(r['p_up'], 1 - r['p_up']):.1%}, "
-              f"факт {r['move']:+.2%} ({r['close_from']:,.2f} → {r['close_to']:,.2f}) → {'✅' if right else '❌'}"]
+        h0 = pd.Timestamp(r["hour"])
+        L += [f"2. ЧТО ОБНАРУЖЕНО ЗА ПРОШЛЫЙ ЧАС {h0:%H:00}–{h0 + pd.Timedelta(hours=1):%H:00} UTC",
+              f"   Прогноз был {word(r['p_up'])} {conf(r['p_up'])}, факт {r['move']:+.2%} "
+              f"({r['close_from']:,.2f} → {r['close_to']:,.2f}) → {'✅ верно' if r['hit'] else '❌ неверно'}"]
+        if drivers:
+            d = drivers
+            L += [f"   Что реально двигало цену (живые данные, {d['minutes']} минут; корреляция минутных движений цены с каждым потоком):"]
+            for name, same, lead in d["rows"]:
+                if same == same:
+                    L.append(f"     {name}: {same:+.2f} в ту же минуту, {lead:+.2f} с опережением на минуту")
+            L += [f"   Итоги часа: агрессивные покупки минус продажи {usd(d['net_usd'])} из {d['vol_usd'] / 1e6:.1f} млн $ оборота; "
+                  f"крупные сделки {usd(d['big_net'])}; ликвидации лонгов {d['liq_long'] / 1e3:.0f} тыс $, шортов {d['liq_short'] / 1e3:.0f} тыс $; "
+                  f"перевес стакана {d['book_start']:+.2f} → {d['book_end']:+.2f}"
+                  + (f"; открытый интерес {d['oi_chg']:+.2%}" if d['oi_chg'] == d['oi_chg'] else "")
+                  + f"; диапазон {d['lo']:,.2f}–{d['hi']:,.2f}"]
+        else:
+            L.append("   Живых минутных данных за этот час нет (сборщик не работал), разбор только по часовым данным.")
         c_prev = prev_info["contrib"]
         actual = 1 if r["move"] > 0 else -1
-        good = [i for i in np.argsort(-np.abs(c_prev)) if np.sign(c_prev[i]) == actual][:3]
-        bad = [i for i in np.argsort(-np.abs(c_prev)) if np.sign(c_prev[i]) == -actual][:3]
-        L.append("   Верно указывали направление: " + ("; ".join(f"{NAMES[FEATS[i]]} ({c_prev[i]:+.3f})" for i in good) or "—"))
-        L.append("   Толкали в неверную сторону: " + ("; ".join(f"{NAMES[FEATS[i]]} ({c_prev[i]:+.3f})" for i in bad) or "—"))
+        order = np.argsort(-np.abs(c_prev))
+        good = [i for i in order if np.sign(c_prev[i]) == actual and abs(c_prev[i]) > 1e-6][:4]
+        bad = [i for i in order if np.sign(c_prev[i]) == -actual and abs(c_prev[i]) > 1e-6][:4]
+        L.append("   Метрики модели, указавшие верно: " + ("; ".join(f"{NAMES[ALL[i]]} ({c_prev[i]:+.3f})" for i in good) or "—"))
+        L.append("   Метрики модели, ошибшиеся: " + ("; ".join(f"{NAMES[ALL[i]]} ({c_prev[i]:+.3f})" for i in bad) or "—"))
         L.append("")
-    if L_info is not None and not L_info.get("skipped"):
+
+    # 3. what the model learned from it
+    if trained:
         bf, af, dw = L_info["before"], L_info["after"], L_info["dw"]
         w_now = np.array(m["w"])
-        p_draft = float(sigmoid(zrow(m, x_next) @ L_info["w_before"] + L_info["b_before"]))
-        L += ["2. ОБУЧЕНИЕ (прогнано до этого письма)",
-              f"   Данные: новый час + повтор последних {L_info['n']} часов (рост был в {L_info['up_share']:.0%} из них)",
-              f"   Ошибка модели на этих часах (log-loss): {bf['logloss']:.4f} → {af['logloss']:.4f} "
-              f"({'меньше' if af['logloss'] < bf['logloss'] else 'больше'} на {abs(af['logloss'] - bf['logloss']):.4f})",
-              f"   Точность на этих часах: {bf['acc']:.1%} → {af['acc']:.1%}",
-              "   Веса, изменившиеся сильнее всего (влияние на «вверх»):"]
+        L += ["3. ЧЕМУ МОДЕЛЬ НАУЧИЛАСЬ (обучение прошло до отправки письма)",
+              f"   Обучена на прошлом часе + повторе последних {L_info['n']} часов",
+              f"   Ошибка модели на этих часах (log-loss): {bf['logloss']:.4f} → {af['logloss']:.4f}; "
+              f"точность на них: {bf['acc']:.1%} → {af['acc']:.1%}",
+              "   Сильнее всего изменились веса (влияние на «вверх»):"]
         for i in np.argsort(-np.abs(dw))[:5]:
-            L.append(f"     {NAMES[FEATS[i]]}: {w_now[i] - dw[i]:+.4f} → {w_now[i]:+.4f}")
+            L.append(f"     {NAMES[ALL[i]]}: {w_now[i] - dw[i]:+.4f} → {w_now[i]:+.4f}")
         tot = w_now - np.array(m["w0"])
-        L.append("   С момента запуска: " + "; ".join(f"{NAMES[FEATS[i]]} {m['w0'][i]:+.3f}→{w_now[i]:+.3f}"
-                                                   for i in np.argsort(-np.abs(tot))[:3]))
-        L.append(f"   Обновлений модели всего: {m['updates']}")
+        L.append("   За всё время обучения: " + "; ".join(f"{NAMES[ALL[i]]} {m['w0'][i]:+.3f}→{w_now[i]:+.3f}"
+                                                     for i in np.argsort(-np.abs(tot))[:4]))
+        L.append(f"   Обновлений модели: {m['updates']}")
         L.append("")
-        rc = L_info["recheck"]
-        lt = rc["last"]
-        hour_txt = f"{pd.Timestamp(lt['t']) + pd.Timedelta(hours=1):%H:00}–{pd.Timestamp(lt['t']) + pd.Timedelta(hours=2):%H:00}"
-        L += ["3. АНАЛИЗ НОВОЙ МОДЕЛЬЮ (переоценка недавнего прошлого после обучения)",
-              f"   Прошлый час {hour_txt}: старая модель {'ВВЕРХ' if lt['old'] >= 0.5 else 'ВНИЗ'} {max(lt['old'], 1 - lt['old']):.1%} → "
-              f"новая {'ВВЕРХ' if lt['new'] >= 0.5 else 'ВНИЗ'} {max(lt['new'], 1 - lt['new']):.1%}; факт {'ВВЕРХ' if lt['y'] else 'ВНИЗ'} → "
-              + ("теперь модель оценила бы его верно" if (lt['new'] >= 0.5) == bool(lt['y']) else "даже после обучения модель оценила бы его неверно"),
-              f"   Последние 24 часа заново: старые веса угадали бы {rc['acc_old']:.0%}, новые {rc['acc_new']:.0%} "
-              "(эти часы участвовали в обучении, поэтому это проверка усвоения, а не будущей точности)"]
-        if rc["flips"]:
-            L.append(f"   Мнение изменилось в {len(rc['flips'])} из 24 часов:")
-            for f in rc["flips"][-5:]:
-                ok_new = (f["new"] >= 0.5) == bool(f["y"])
-                L.append(f"     {pd.Timestamp(f['t']) + pd.Timedelta(hours=1):%d.%m %H:00}: "
-                         f"{'ВВЕРХ' if f['old'] >= 0.5 else 'ВНИЗ'} → {'ВВЕРХ' if f['new'] >= 0.5 else 'ВНИЗ'}, "
-                         f"факт {'ВВЕРХ' if f['y'] else 'ВНИЗ'} {'✅ исправилась' if ok_new else '❌ ухудшилась'}")
-        else:
-            L.append("   Ни по одному из последних 24 часов мнение модели не перевернулось: обучение уточнило уверенность, но не выводы.")
-        L.append("")
-    n = 4 if L_info is not None and not L_info.get("skipped") else (2 if L else 1)
-    L += [f"{n}. ПРОГНОЗ НА {t_next:%H:00}–{t_next + pd.Timedelta(hours=1):%H:00} UTC: "
-          f"{'ВВЕРХ' if up else 'ВНИЗ'} {max(p, 1 - p):.1%}"]
-    if p_draft is not None:
-        L.append(f"   До обучения было: {'ВВЕРХ' if p_draft >= 0.5 else 'ВНИЗ'} {max(p_draft, 1 - p_draft):.1%} → "
-                 f"обучение сдвинуло вероятность роста на {(p - p_draft) * 100:+.2f} п.п."
-                 + (" и ПЕРЕВЕРНУЛО направление" if (p_draft >= 0.5) != up else ""))
-    L.append(f"   Без обучения (замороженная копия): {'ВВЕРХ' if pf >= 0.5 else 'ВНИЗ'} {max(pf, 1 - pf):.1%}")
-    L.append(f"   Цена {close_now:,.2f}; обычный ход за час ±{vol1h:.2%} → {close_now * (1 - vol1h):,.2f}–{close_now * (1 + vol1h):,.2f}")
-    L.append("   Раскладка по всем входам (вклад = значение × вес; плюс — за рост, минус — за падение):")
-    for i in np.argsort(-np.abs(contrib)):
-        L.append(f"     {contrib[i]:+.3f}  {NAMES[FEATS[i]]}: {describe(FEATS[i], x_next[i], pct_next[i])}")
-    L.append(f"     ─────\n     {contrib.sum() + m['b']:+.3f}  итог → вероятность роста {p:.1%}")
-    L.append("")
+
+    # 4. score
     if len(done):
-        L.append(f"{n + 1}. СЧЁТ: 24 ч {ci(done.tail(24)['hit'].astype(bool))} · всё время {ci(done['hit'].astype(bool))} · "
+        L.append(f"4. СЧЁТ: 24 ч {ci(done.tail(24)['hit'].astype(bool))} · всё время {ci(done['hit'].astype(bool))} · "
                  f"без обучения {ci(done['hit_frozen'].astype(bool))} · «против прошлого часа» {ci(done['hit_base'].astype(bool))}")
         diff = done["hit"].astype(float) - done["hit_frozen"].astype(float)
         if len(done) >= 24 and diff.std() > 0:
             se = diff.std() / np.sqrt(len(diff))
-            L.append(f"   Обучение против замороженной: {diff.mean() * 100:+.1f} п.п. "
+            L.append(f"   Обучение против копии без обучения: {diff.mean() * 100:+.1f} п.п. "
                      f"(95%: {(diff.mean() - 1.96 * se) * 100:+.1f}…{(diff.mean() + 1.96 * se) * 100:+.1f})")
-    head = (f"ИТОГ: на {t_next:%H:00}–{t_next + pd.Timedelta(hours=1):%H:00} UTC {'ВВЕРХ' if up else 'ВНИЗ'} "
-            f"{max(p, 1 - p):.1%}" + (f" (до обучения было {'ВВЕРХ' if p_draft >= 0.5 else 'ВНИЗ'} "
-                                      f"{max(p_draft, 1 - p_draft):.1%})" if p_draft is not None else ""))
-    L = [head, ""] + L
-    subj = f"XAU {t_next:%H:00} UTC: {'ВВЕРХ' if up else 'ВНИЗ'} {max(p, 1 - p):.1%}"
+    subj = f"XAU {t_next:%H:00} UTC: {word(p)} {conf(p)}"
     if len(done):
         subj += f" | прошлый час {'✅' if done.iloc[-1]['hit'] else '❌'} | 24ч {done.tail(24)['hit'].astype(bool).mean():.0%}"
     return subj, "\n".join(L), p, pf
@@ -332,10 +455,12 @@ def report(log, m, L_info, x_next, pct_next, t_next, close_now, vol1h, prev_info
 # ------------------------------------------------------------------ cycle
 
 def cycle(R, m, log, t_last, email=True):
-    """t_last: the hour bar that just closed. Score the forecast for it, explain it, learn, forecast t_last + 1h."""
-    X = features(R)
+    """t_last: the hour bar that just closed. Score the forecast for it, find what moved the price,
+    learn, then forecast t_last + 1h with the updated model and send everything in one email."""
+    X = features_all(R)
+    scale_live(m, X)
     up = (R["close"].shift(-1) > R["close"]).astype(float).where(R["close"].shift(-1).notna())
-    L_info, prev_info = None, None
+    L_info, prev_info, drivers = None, None, None
     pend = log["hit"].isna() & (pd.to_datetime(log["hour"]) == t_last) if len(log) else pd.Series(dtype=bool)
     if len(log) and pend.any():
         i = log.index[pend][0]
@@ -346,17 +471,18 @@ def cycle(R, m, log, t_last, email=True):
         log.loc[i, "hit"] = bool((log.loc[i, "p_up"] >= 0.5) == (move > 0))
         log.loc[i, "hit_frozen"] = bool((log.loc[i, "p_frozen"] >= 0.5) == (move > 0))
         log.loc[i, "hit_base"] = bool((log.loc[i, "base_up"] == 1) == (move > 0))
-        _, c_prev = predict(m, X.loc[prev].values)          # inputs that made last hour's forecast, old weights
+        _, c_prev = predict(m, X.loc[prev].values)          # the inputs behind last hour's forecast, old weights
         prev_info = dict(contrib=c_prev)
-        L_info = learn(m, X, up, prev)                         # the label of bar `prev` is now known
+        drivers = hour_drivers(t_last)                        # minute-by-minute: what moved the price in that hour
+        L_info = learn(m, X, up, prev)                         # the outcome of `prev`'s forecast is now known
     x = X.loc[t_last]
-    missing = [NAMES[c] for c in x.index[x.isna()]]
+    missing = [NAMES[c] for c in FEATS if x[c] != x[c]]
     if len(missing) > 4:
         raise RuntimeError(f"too many missing inputs at {t_last}: {missing}")
     pct = X.loc[:t_last].tail(720).rank(pct=True).iloc[-1].values
     t_next = t_last + pd.Timedelta(hours=1)
     vol1h = float(np.log(R["close"]).diff().tail(168).std())
-    subj, body, p, pf = report(log, m, L_info, x.values, pct, t_next, R.loc[t_last, "close"], vol1h, prev_info)
+    subj, body, p, pf = report(log, m, L_info, x.values, pct, t_next, R.loc[t_last, "close"], vol1h, prev_info, drivers)
     if missing:
         body += "\nНет данных в этот час (учтены как нейтральные): " + ", ".join(missing)
     base_up = 1 if R["close"].iloc[-1] < R["close"].iloc[-2] else 0     # opposite of the last hour
@@ -374,10 +500,9 @@ def load():
     R = pd.read_parquet(RAW) if os.path.exists(RAW) else build_raw_from_archive()
     log = pd.read_csv(LOG) if os.path.exists(LOG) else pd.DataFrame(
         columns=["hour", "p_up", "p_frozen", "base_up", "close_from", "close_to", "move", "hit", "hit_frozen", "hit_base"])
-    if os.path.exists(MODEL):
-        m = json.load(open(MODEL))
-    else:
-        X = features(R)
+    m = json.load(open(MODEL)) if os.path.exists(MODEL) else None
+    if m is None or m.get("features") != ALL:
+        X = features_all(R)
         y = (R["close"].shift(-1) > R["close"]).astype(float).where(R["close"].shift(-1).notna())
         m = init_model(X, y)
     return R, m, log
@@ -395,7 +520,7 @@ def main():
         n = int(sys.argv[sys.argv.index("--replay") + 1])
         R = build_raw_from_archive()
         cut = R.index[-n - 1]
-        X = features(R.loc[:cut])
+        X = features_all(R.loc[:cut])
         y = (R["close"].shift(-1) > R["close"]).astype(float).loc[:cut].iloc[:-1]
         m = init_model(X.iloc[:-1], y)
         log = pd.DataFrame(columns=["hour", "p_up", "p_frozen", "base_up", "close_from", "close_to", "move", "hit",

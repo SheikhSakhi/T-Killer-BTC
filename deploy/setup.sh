@@ -123,6 +123,19 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 UNIT
+sudo tee /etc/systemd/system/tk-collect.service >/dev/null <<UNIT
+[Unit]
+Description=T-Killer live XAUUSDT collector (trades, order book, liquidations, OI every minute)
+After=network-online.target
+[Service]
+User=$USER
+WorkingDirectory=$DIR
+ExecStart=$DIR/.venv/bin/python -m tk.collect
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+UNIT
 sudo tee /etc/systemd/system/tk-hourly.service >/dev/null <<UNIT
 [Unit]
 Description=T-Killer XAUUSDT hourly forecast, check and learning (email)
@@ -143,9 +156,10 @@ Persistent=false
 WantedBy=timers.target
 UNIT
 sudo systemctl daemon-reload
-sudo systemctl enable --now tk-live.timer tk-daily.timer tk-xau.timer tk-hourly.timer
+sudo systemctl enable --now tk-collect.service tk-live.timer tk-daily.timer tk-xau.timer tk-hourly.timer
 systemctl list-timers 'tk-*' --no-pager
 
 echo
 echo "Done. Mode is PAPER (no orders). Logs: journalctl -u tk-live -n 50"
+echo "Live collector: journalctl -u tk-collect -n 20   ·   minute files: ls $DIR/cache/minutes"
 echo "Switch to testnet later with: sed -i \"s/^MODE=.*/MODE='exchange'/\" $DIR/.env"
