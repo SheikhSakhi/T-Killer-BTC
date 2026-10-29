@@ -182,7 +182,7 @@ def main(risk_usd=1000.0):
         full = full[~full.index.duplicated(keep="last")]
     except Exception:
         full = h
-    now = h.index[-1] + pd.Timedelta(hours=1)
+    now = pd.Timestamp(datetime.now(timezone.utc)).tz_localize(None).floor("min")
     side, px, sma, v = side_at(full, now, dollar())
     lr = np.log(full["close"]).diff()
     sig_d = float(lr.iloc[-168:].std() * np.sqrt(24))
