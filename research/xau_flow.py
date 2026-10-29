@@ -55,7 +55,7 @@ def panel():
     X["book_imb_1.0_chg24"] = X["book_imb_1.0"] - X["book_imb_1.0"].shift(24)
     X["book_depth_1.0_z"] = zs(np.log(b["n-1.0"] + b["n+1.0"]), 168)
     m = met.reindex(k.index).ffill(limit=2)
-    oi = m["sum_open_interest_value"]
+    oi = m["sum_open_interest_value"].where(lambda v: v > 0)   # Binance archive has zero OI rows: treat as missing
     for n in (1, 4, 24):
         X[f"crowd_oi_chg_{n}h"] = oi / oi.shift(n) - 1
     X["crowd_top_ls_z"] = zs(m["sum_toptrader_long_short_ratio"], 168)
