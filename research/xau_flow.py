@@ -33,11 +33,29 @@ def zs(s, n):
     return (s - s.rolling(n, min_periods=n // 2).mean()) / s.rolling(n, min_periods=n // 2).std()
 
 
+def archive_klines():
+    """XAUUSDT 1h klines from the official archive only (no testnet bars: their volumes are synthetic)."""
+    path = os.path.join(F, "klines_1h_archive.parquet")
+    if os.path.exists(path):
+        return pd.read_parquet(path)
+    months = pd.period_range("2025-12", pd.Timestamp.today().to_period("M") - 1, freq="M")
+    parts = [data._zip_csv(f"{data.BASE}/monthly/klines/XAUUSDT/1h/XAUUSDT-1h-{m}.zip") for m in months]
+    today = pd.Timestamp.today().normalize()
+    parts += [data._zip_csv(f"{data.BASE}/daily/klines/XAUUSDT/1h/XAUUSDT-1h-{d.date()}.zip")
+              for d in pd.date_range(today.replace(day=1), today - pd.Timedelta(days=1))]
+    df = pd.concat([p.set_axis(data.KCOLS, axis=1) for p in parts if p is not None])
+    df["time"] = data._ms(df["open_time"])
+    df = df.drop_duplicates("time").set_index("time").sort_index()
+    df = df[["open", "high", "low", "close", "volume", "quote_volume", "taker_buy_quote"]].astype(float)
+    df.to_parquet(path)
+    return df
+
+
 def panel():
-    k = data.load("1h", "XAUUSDT")
+    k = archive_klines()
     book = pd.read_parquet(os.path.join(F, "book_1h.parquet"))
+    # last 5-minute value inside bar [hh:00, hh+1:00) is created at hh:55, i.e. known at the bar's close
     met = pd.read_parquet(os.path.join(F, "metrics.parquet")).resample("1h").last()
-    met.index = met.index - pd.Timedelta(hours=1)        # value at hh:55 belongs to the hour that started at hh-1... aligned to bar open
     prem = pd.read_parquet(os.path.join(F, "premium_1h.parquet"))["premium"]
     fund = pd.read_parquet(os.path.join(F, "funding.parquet"))["last_funding_rate"]
     usd = xau.dollar()
@@ -63,7 +81,7 @@ def panel():
     X["crowd_taker_ls_4h"] = np.log(m["sum_taker_long_short_vol_ratio"]).rolling(4).mean()
     X["basis_premium"] = prem.reindex(k.index)
     X["basis_premium_24h"] = X["basis_premium"].rolling(24).mean()
-    X["basis_funding"] = fund.reindex(k.index).ffill()
+    X["basis_funding"] = fund.reindex(k.index).ffill(limit=8)   # monthly archive: stale values are dropped, not carried
     lr = np.log(k["close"]).diff()
     X["ctx_ret_4h"] = k["close"].pct_change(4)
     X["ctx_ret_24h"] = k["close"].pct_change(24)

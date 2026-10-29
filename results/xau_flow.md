@@ -23,3 +23,13 @@ The imbalance is positive 83% of hours, so its sign is mostly "long".
 | same, 7 days, 2% / 4% | +0.56R | −0.21R |
 Every variant made money while gold rose and lost when it fell: the correlation is real but does
 not give a trade that survives the second half. Not adopted.
+
+## Data audit and corrections (2026-10-29)
+- Lookahead bug fixed: open interest and long/short metrics were shifted one hour back, so each hour
+  used a value created 55 minutes into the hour being predicted. `tests/test_xau_flow_leak.py` now
+  corrupts all data after a cut-off and fails if any earlier feature changes (it fails on the old code).
+- Prices now come only from the official archive (testnet bars had synthetic volume).
+- Stale October funding is no longer carried forward.
+After the fixes, the hourly predict→check→learn replay (6,020 hours) gives: ridge 49.6%, similar
+situations 50.3% (it was 52.0% only because of the leak), opposite of the last hour 51.7%.
+The 24-hour single-feature results above are unchanged.
