@@ -194,10 +194,17 @@ def learn(m, X, y, t):
     before = _window_stats(Z, yy, w_before, b_before)
     w, b = fit(Z, yy, w_before, b_before, steps=EPOCHS * 10, lr=LR)
     after = _window_stats(Z, yy, w, b)
+    # re-analysis of the recent past with the new model vs the old one (same hours, same inputs)
+    Zr, yr, tr = Z[-24:], yy[-24:], win[ok].index[-24:]
+    old_p, new_p = sigmoid(Zr @ w_before + b_before), sigmoid(Zr @ w + b)
+    flips = [dict(t=str(tt), y=int(yv), old=float(po), new=float(pn)) for tt, yv, po, pn in zip(tr, yr, old_p, new_p)
+             if (po >= 0.5) != (pn >= 0.5)]
+    recheck = dict(acc_old=float(np.mean((old_p >= 0.5) == (yr == 1))), acc_new=float(np.mean((new_p >= 0.5) == (yr == 1))),
+                   last=dict(t=str(tr[-1]), y=int(yr[-1]), old=float(old_p[-1]), new=float(new_p[-1])), flips=flips)
     m["w"], m["b"], m["updates"] = w.tolist(), float(b), m["updates"] + 1
     m["w_history"] = (m["w_history"] + [dict(t=str(t), w=[round(v, 4) for v in w])])[-24 * 30:]
     return dict(n=len(yy), up_share=float(yy.mean()), before=before, after=after, dw=w - w_before,
-                w_before=w_before, b_before=b_before, skipped=False)
+                w_before=w_before, b_before=b_before, recheck=recheck, skipped=False)
 
 
 def predict(m, x, frozen=False):
@@ -271,7 +278,26 @@ def report(log, m, L_info, x_next, pct_next, t_next, close_now, vol1h, prev_info
                                                    for i in np.argsort(-np.abs(tot))[:3]))
         L.append(f"   Обновлений модели всего: {m['updates']}")
         L.append("")
-    n = 3 if L else 1
+        rc = L_info["recheck"]
+        lt = rc["last"]
+        hour_txt = f"{pd.Timestamp(lt['t']) + pd.Timedelta(hours=1):%H:00}–{pd.Timestamp(lt['t']) + pd.Timedelta(hours=2):%H:00}"
+        L += ["3. АНАЛИЗ НОВОЙ МОДЕЛЬЮ (переоценка недавнего прошлого после обучения)",
+              f"   Прошлый час {hour_txt}: старая модель {'ВВЕРХ' if lt['old'] >= 0.5 else 'ВНИЗ'} {max(lt['old'], 1 - lt['old']):.1%} → "
+              f"новая {'ВВЕРХ' if lt['new'] >= 0.5 else 'ВНИЗ'} {max(lt['new'], 1 - lt['new']):.1%}; факт {'ВВЕРХ' if lt['y'] else 'ВНИЗ'} → "
+              + ("теперь модель оценила бы его верно" if (lt['new'] >= 0.5) == bool(lt['y']) else "даже после обучения модель оценила бы его неверно"),
+              f"   Последние 24 часа заново: старые веса угадали бы {rc['acc_old']:.0%}, новые {rc['acc_new']:.0%} "
+              "(эти часы участвовали в обучении, поэтому это проверка усвоения, а не будущей точности)"]
+        if rc["flips"]:
+            L.append(f"   Мнение изменилось в {len(rc['flips'])} из 24 часов:")
+            for f in rc["flips"][-5:]:
+                ok_new = (f["new"] >= 0.5) == bool(f["y"])
+                L.append(f"     {pd.Timestamp(f['t']) + pd.Timedelta(hours=1):%d.%m %H:00}: "
+                         f"{'ВВЕРХ' if f['old'] >= 0.5 else 'ВНИЗ'} → {'ВВЕРХ' if f['new'] >= 0.5 else 'ВНИЗ'}, "
+                         f"факт {'ВВЕРХ' if f['y'] else 'ВНИЗ'} {'✅ исправилась' if ok_new else '❌ ухудшилась'}")
+        else:
+            L.append("   Ни по одному из последних 24 часов мнение модели не перевернулось: обучение уточнило уверенность, но не выводы.")
+        L.append("")
+    n = 4 if L_info is not None and not L_info.get("skipped") else (2 if L else 1)
     L += [f"{n}. ПРОГНОЗ НА {t_next:%H:00}–{t_next + pd.Timedelta(hours=1):%H:00} UTC: "
           f"{'ВВЕРХ' if up else 'ВНИЗ'} {max(p, 1 - p):.1%}"]
     if p_draft is not None:

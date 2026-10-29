@@ -50,5 +50,5 @@ def test_cycle_scores_previous_forecast():
     move = R["close"].iloc[321] / R["close"].iloc[320] - 1
     assert bool(first["hit"]) == ((first["p_up"] >= 0.5) == (move > 0))
     assert body.startswith("ИТОГ:")
-    assert body.index("ПРОШЛЫЙ ЧАС") < body.index("ОБУЧЕНИЕ") < body.index("ПРОГНОЗ НА") < body.index("СЧЁТ")
+    assert body.index("ПРОШЛЫЙ ЧАС") < body.index("ОБУЧЕНИЕ") < body.index("АНАЛИЗ НОВОЙ МОДЕЛЬЮ") < body.index("ПРОГНОЗ НА") < body.index("СЧЁТ")
     assert "До обучения было" in body and "Раскладка по всем входам" in body
