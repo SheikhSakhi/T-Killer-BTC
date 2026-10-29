@@ -209,50 +209,55 @@ def ci(hits):
 
 
 def report(log, m, dw, x_next, t_next, close_now, vol1h):
+    """Email order: 1) next-hour forecast, 2) how the last hour went and what was learned, 3) conclusions."""
     p, contrib = predict(m, x_next)
     pf, _ = predict(m, x_next, frozen=True)
     up = p >= 0.5
-    L = []
+    order = np.argsort(-np.abs(contrib))[:3]
+    L = [f"1. ПРОГНОЗ НА СЛЕДУЮЩИЙ ЧАС {t_next:%H:00}–{t_next + pd.Timedelta(hours=1):%H:00} UTC",
+         f"   Направление: {'ВВЕРХ' if up else 'ВНИЗ'}, уверенность {max(p, 1 - p):.0%}",
+         f"   Цена сейчас {close_now:,.2f}; обычный ход за час ±{vol1h:.2%}: {close_now * (1 - vol1h):,.0f}–{close_now * (1 + vol1h):,.0f}",
+         "   Почему: " + "; ".join(f"{NAMES[FEATS[i]]} ({'за рост' if contrib[i] > 0 else 'за падение'})" for i in order),
+         f"   Замороженная копия (без обучения) говорит: {'ВВЕРХ' if pf >= 0.5 else 'ВНИЗ'} {max(pf, 1 - pf):.0%}",
+         ""]
     done = log.dropna(subset=["hit"])
+    verdict, conclusions = None, []
     if len(done):
         r = done.iloc[-1]
-        L += [f"РЕЗУЛЬТАТ ЧАСА {pd.Timestamp(r['hour']):%H:00}–{pd.Timestamp(r['hour']) + pd.Timedelta(hours=1):%H:00} UTC",
-              f"  Прогноз: {'ВВЕРХ' if r['p_up'] >= 0.5 else 'ВНИЗ'} ({max(r['p_up'], 1 - r['p_up']):.0%})",
-              f"  Факт:    {r['move']:+.2%} ({r['close_from']:,.2f} → {r['close_to']:,.2f}) → {'✅ совпало' if r['hit'] else '❌ не совпало'}",
-              ""]
-        last24 = done.tail(24)
-        L += ["СЧЁТ (каждый прогноз сделан до результата):",
-              f"  Обучающаяся модель, 24 ч: {ci(last24['hit'].astype(bool))}",
-              f"  Обучающаяся модель, всё время: {ci(done['hit'].astype(bool))}",
-              f"  Замороженная копия (без обучения), всё время: {ci(done['hit_frozen'].astype(bool))}",
-              f"  «Против прошлого часа», всё время: {ci(done['hit_base'].astype(bool))}"]
+        L += [f"2. ОБУЧЕНИЕ НА ПРОШЛОМ ЧАСЕ {pd.Timestamp(r['hour']):%H:00}–{pd.Timestamp(r['hour']) + pd.Timedelta(hours=1):%H:00} UTC",
+              f"   Прогноз был: {'ВВЕРХ' if r['p_up'] >= 0.5 else 'ВНИЗ'} ({max(r['p_up'], 1 - r['p_up']):.0%})",
+              f"   Факт: {r['move']:+.2%} ({r['close_from']:,.2f} → {r['close_to']:,.2f}) → {'✅ совпало' if r['hit'] else '❌ не совпало'}"]
+        if dw is not None and np.abs(dw).sum() > 0:
+            w_now = np.array(m["w"])
+            L.append("   Что модель изменила в себе после этого часа (вес влияния на «вверх»):")
+            for i in np.argsort(-np.abs(dw))[:3]:
+                L.append(f"     {NAMES[FEATS[i]]}: {w_now[i] - dw[i]:+.3f} → {w_now[i]:+.3f}")
+            tot = w_now - np.array(m["w0"])
+            j = np.argsort(-np.abs(tot))[:3]
+            L.append("   С момента запуска сильнее всего изменились: "
+                     + "; ".join(f"{NAMES[FEATS[i]]} {m['w0'][i]:+.2f}→{w_now[i]:+.2f}" for i in j))
+        L += ["", "3. ВЫВОДЫ",
+              f"   Совпадений за 24 ч: {ci(done.tail(24)['hit'].astype(bool))}",
+              f"   Совпадений за всё время: обучающаяся {ci(done['hit'].astype(bool))}",
+              f"                            замороженная {ci(done['hit_frozen'].astype(bool))}",
+              f"                            «против прошлого часа» {ci(done['hit_base'].astype(bool))}"]
         diff = done["hit"].astype(float) - done["hit_frozen"].astype(float)
-        if len(done) >= 24:
-            se = diff.std() / np.sqrt(len(diff)) if diff.std() > 0 else 0
+        if len(done) >= 24 and diff.std() > 0:
+            se = diff.std() / np.sqrt(len(diff))
             lo, hi = diff.mean() - 1.96 * se, diff.mean() + 1.96 * se
             verdict = ("обучение РЕАЛЬНО помогает" if lo > 0 else
-                       "обучение пока вредит" if hi < 0 else "разница пока в пределах случайности")
-            L.append(f"  Эффект обучения: {diff.mean() * 100:+.1f} п.п. к замороженной ({lo * 100:+.1f}…{hi * 100:+.1f}) → {verdict}")
-        L.append("")
-    if dw is not None and np.abs(dw).sum() > 0:
-        order = np.argsort(-np.abs(dw))[:3]
-        L.append("ЧТО МОДЕЛЬ ИЗМЕНИЛА ПОСЛЕ ЭТОГО ЧАСА (вес влияния на прогноз «вверх»):")
-        w_now = np.array(m["w"])
-        for i in order:
-            L.append(f"  {NAMES[FEATS[i]]}: {w_now[i] - dw[i]:+.3f} → {w_now[i]:+.3f}")
-        tot = w_now - np.array(m["w0"])
-        j = np.argsort(-np.abs(tot))[:3]
-        L.append("  С момента запуска сильнее всего изменились: "
-                 + "; ".join(f"{NAMES[FEATS[i]]} {m['w0'][i]:+.2f}→{w_now[i]:+.2f}" for i in j))
-        L.append("")
-    order = np.argsort(-np.abs(contrib))[:3]
-    L += [f"ПРОГНОЗ НА {t_next:%H:00}–{t_next + pd.Timedelta(hours=1):%H:00} UTC",
-          f"  Направление: {'ВВЕРХ' if up else 'ВНИЗ'}, уверенность {max(p, 1 - p):.0%} "
-          f"(замороженная копия: {'ВВЕРХ' if pf >= 0.5 else 'ВНИЗ'} {max(pf, 1 - pf):.0%})",
-          f"  Цена сейчас {close_now:,.2f}; обычный ход за час ±{vol1h:.2%}: {close_now * (1 - vol1h):,.0f}–{close_now * (1 + vol1h):,.0f}",
-          "  Главные причины: " + "; ".join(f"{NAMES[FEATS[i]]} ({'за рост' if contrib[i] > 0 else 'за падение'})" for i in order),
-          "",
-          "Один час почти ничего не значит: при 50–55% совпадений выводы делаются по счёту за 100+ часов."]
+                       "обучение пока вредит" if hi < 0 else "разница с замороженной пока в пределах случайности")
+            L.append(f"   Эффект обучения: {diff.mean() * 100:+.1f} п.п. ({lo * 100:+.1f}…{hi * 100:+.1f}) → {verdict}")
+        else:
+            L.append(f"   Эффект обучения: нужно минимум 24 проверенных часа (сейчас {len(done)})")
+        acc = done["hit"].astype(bool).mean()
+        lo_all = acc - 1.96 * np.sqrt(acc * (1 - acc) / len(done))
+        L.append("   Итог: " + ("модель угадывает лучше монетки (нижняя граница > 50%)" if lo_all > 0.5 else
+                                 "пока не отличить от монетки — прогнозам на час не доверять" if len(done) >= 100 else
+                                 f"данных мало ({len(done)} ч), вывод будет после 100+ часов"))
+    else:
+        L += ["2. ОБУЧЕНИЕ НА ПРОШЛОМ ЧАСЕ: это первый прогноз, проверять пока нечего", "",
+              "3. ВЫВОДЫ: появятся после первых проверенных часов"]
     subj = f"XAU {t_next:%H:00} UTC: {'ВВЕРХ' if up else 'ВНИЗ'} {max(p, 1 - p):.0%}"
     if len(done):
         subj += f" | прошлый час {'✅' if done.iloc[-1]['hit'] else '❌'} | 24ч {done.tail(24)['hit'].astype(bool).mean():.0%}"

@@ -49,4 +49,4 @@ def test_cycle_scores_previous_forecast():
     first = log.iloc[0]
     move = R["close"].iloc[321] / R["close"].iloc[320] - 1
     assert bool(first["hit"]) == ((first["p_up"] >= 0.5) == (move > 0))
-    assert "РЕЗУЛЬТАТ ЧАСА" in body and "ПРОГНОЗ НА" in body
+    assert body.index("ПРОГНОЗ НА СЛЕДУЮЩИЙ ЧАС") < body.index("ОБУЧЕНИЕ НА ПРОШЛОМ ЧАСЕ") < body.index("ВЫВОДЫ")
