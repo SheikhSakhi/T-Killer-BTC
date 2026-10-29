@@ -32,8 +32,8 @@ def test_learning_moves_live_weights_not_frozen():
     y = (R["close"].shift(-1) > R["close"]).astype(float).where(R["close"].shift(-1).notna())
     m = H.init_model(X.iloc[:300], y.iloc[:300])
     w0 = list(m["w0"])
-    dw = H.learn(m, X, y, X.index[350])
-    assert np.abs(dw).sum() > 0
+    info = H.learn(m, X, y, X.index[350])
+    assert np.abs(info["dw"]).sum() > 0 and info["after"]["logloss"] <= info["before"]["logloss"] + 1e-9
     assert m["w0"] == w0 and m["updates"] == 1
 
 
@@ -49,4 +49,6 @@ def test_cycle_scores_previous_forecast():
     first = log.iloc[0]
     move = R["close"].iloc[321] / R["close"].iloc[320] - 1
     assert bool(first["hit"]) == ((first["p_up"] >= 0.5) == (move > 0))
-    assert body.index("ПРОГНОЗ НА СЛЕДУЮЩИЙ ЧАС") < body.index("ОБУЧЕНИЕ НА ПРОШЛОМ ЧАСЕ") < body.index("ВЫВОДЫ")
+    assert body.startswith("ИТОГ:")
+    assert body.index("ПРОШЛЫЙ ЧАС") < body.index("ОБУЧЕНИЕ") < body.index("ПРОГНОЗ НА") < body.index("СЧЁТ")
+    assert "До обучения было" in body and "Раскладка по всем входам" in body
