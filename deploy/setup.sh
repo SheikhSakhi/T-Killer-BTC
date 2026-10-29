@@ -25,7 +25,7 @@ python3 -m venv .venv
 .venv/bin/pip install -q -r requirements-tk.txt
 
 echo "== secrets (input hidden; press Enter to leave one empty for now)"
-read -rsp "Telegram bot token: " TG; echo
+read -rsp "Telegram bot token (press Enter to skip, alerts will go by email only): " TG; echo
 read -rp  "Gmail address the bot sends from: " GU
 read -rsp "Gmail app password (16 letters): " GP; echo
 read -rp  "Email address that receives alerts [$GU]: " GT; GT=${GT:-$GU}
@@ -58,6 +58,9 @@ echo "== test alert"
 
 echo "== downloading 2 years of market data (about 15 minutes)"
 .venv/bin/python -m tk.data --months 24 | tail -3
+
+echo "== XAUUSDT order-flow history for the hourly learner (a few minutes)"
+.venv/bin/python research/xau_flow_data.py | tail -4
 
 echo "== first nightly run (builds tomorrow's plan)"
 chmod +x deploy/run.sh
@@ -120,8 +123,27 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 UNIT
+sudo tee /etc/systemd/system/tk-hourly.service >/dev/null <<UNIT
+[Unit]
+Description=T-Killer XAUUSDT hourly forecast, check and learning (email)
+[Service]
+Type=oneshot
+User=$USER
+ExecStart=$DIR/deploy/run.sh hourly
+TimeoutStartSec=900
+UNIT
+sudo tee /etc/systemd/system/tk-hourly.timer >/dev/null <<UNIT
+[Unit]
+Description=XAUUSDT hourly learner, 90 seconds after every hour
+[Timer]
+OnCalendar=*-*-* *:01:30
+AccuracySec=5s
+Persistent=false
+[Install]
+WantedBy=timers.target
+UNIT
 sudo systemctl daemon-reload
-sudo systemctl enable --now tk-live.timer tk-daily.timer tk-xau.timer
+sudo systemctl enable --now tk-live.timer tk-daily.timer tk-xau.timer tk-hourly.timer
 systemctl list-timers 'tk-*' --no-pager
 
 echo
