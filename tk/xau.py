@@ -26,6 +26,7 @@ SYM = "XAUUSDT"
 SL, TP, HOLD_H = 0.02, 0.04, 168
 FEE = 0.0014                  # taker in + out + slippage, share of notional
 LEV = 10
+LIMIT_BETTER = 0.003          # limit entry 0.3% better than the signal price, valid 24h (research: +0.25/+0.12R vs +0.20/+0.11R)
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 LOG = os.path.join(ROOT, "data", "xau", "signals.csv")
 CACHE = os.path.join(ROOT, "cache", "XAUUSDT-1h-archive.parquet")
@@ -223,6 +224,11 @@ def main(risk_usd=1000.0):
         f"  Размер:  {notional:,.0f} $ позиции = {qty:.3f} XAU, маржа {notional / LEV:,.0f} $ при {LEV}x",
         f"  Итог:    стоп ≈ −{risk_usd:,.0f} $ · тейк ≈ +{notional * (TP - FEE):,.0f} $",
         f"  Ликвидация {LEV}x ≈ {liq:,.2f} (стоп сработает раньше)",
+        "",
+        f"ВХОД ЛИМИТКОЙ (лучше по истории): {px * (1 - side * LIMIT_BETTER):,.2f} — на {LIMIT_BETTER:.1%} "
+        f"{'выше' if side < 0 else 'ниже'} текущей цены, ордер живёт 24 ч; не исполнился → сделки нет.",
+        f"  Тогда стоп {px * (1 - side * LIMIT_BETTER) * (1 - side * SL):,.2f}, тейк {px * (1 - side * LIMIT_BETTER) * (1 + side * TP):,.2f}. "
+        f"Исполняется ~7 раз из 10.",
         "",
         f"ПОЧЕМУ {word} (2 из 3 голосов решают):",
         f"  Тренд 20 дней:  {'ЛОНГ' if v['trend20'] > 0 else 'ШОРТ'} (цена {'выше' if v['trend20'] > 0 else 'ниже'} средней {sma:,.0f})",
