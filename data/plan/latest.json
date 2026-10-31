@@ -1,0 +1,14 @@
+{
+ "day": "2026-10-31",
+ "made_at": "2026-10-31 14:42:35.592519+00:00",
+ "select": {
+  "train": 90,
+  "gap_val": 30,
+  "t_req": 2.0,
+  "min_train": 15,
+  "min_val": 5,
+  "min_coins": 3
+ },
+ "candidates": [],
+ "tested": 1812
+}

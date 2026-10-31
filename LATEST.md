@@ -1,24 +1,18 @@
-# BTC: прогноз Kronos на 24 часа
+# T-Killer: daily dashboard
 
-_Обновлено: 2026-10-24 04:32 UTC. Последняя закрытая свеча: 2026-10-24 03:00:00 UTC._
+_Updated 2026-10-31 14:42 UTC · mode paper_
 
-| | |
-|---|---|
-| Цена сейчас | **80,978** |
-| За прошлые 24ч | -0.75% (мин 80,625 / макс 82,009) |
-| Медиана прогноза на 2026-10-25 03:00:00 | **82,185** (+1.49%) |
-| Диапазон 10–90% сценариев | 81,597 – 82,720 |
-| Сценариев с ростом | 100% |
-| Наклон модели | **вверх** |
+## Plan for 2026-10-31
 
-## Насколько этому верить (живая статистика)
+No variant passed the guards. **No trade tomorrow.** Sitting out is a position.
 
-- Прогнозов сверено: **5**
-- Угадано направление: **40%**
-- Средняя ошибка: Kronos 1,179 $ vs «цена не изменится» 1,286 $
-- Цена попала в диапазон 10–90%: 20% (норма 80%)
-- Вердикт: **пока шум**
+## How the selection procedure itself has done (out of sample, 1% risk per trade)
 
-Историческая проверка (до запуска): см. `results/backtest.md`.
+- last 90 days: 38 trades, win 53%, avg -0.02R, total -0.7R, max drawdown -7.0%
+- last 365 days: 53 trades, win 57%, avg +0.10R, total +5.4R, max drawdown -7.0%
 
-> Не торговый совет. Одна точка прогноза — не сигнал. Диапазон модели исторически слишком узкий: реальный разброс шире.
+## Live results
+
+- No closed trades yet.
+
+> Not financial advice. Small-stake experiment; the guards and limits are in `tk/config.py`.
