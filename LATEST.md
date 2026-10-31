@@ -1,8 +1,8 @@
 # T-Killer: daily dashboard
 
-_Updated 2026-10-31 14:42 UTC · mode paper_
+_Updated 2026-10-31 22:45 UTC · mode paper_
 
-## Plan for 2026-10-31
+## Plan for 2026-11-01
 
 No variant passed the guards. **No trade tomorrow.** Sitting out is a position.
 
