@@ -1,10 +1,14 @@
 # T-Killer: daily dashboard
 
-_Updated 2026-11-07 22:45 UTC · mode paper_
+_Updated 2026-11-08 22:45 UTC · mode paper_
 
-## Plan for 2026-11-08
+## Plan for 2026-11-09
 
-No variant passed the guards. **No trade tomorrow.** Sitting out is a position.
+| # | Coin | Strategy | Session | Train trades | Train avg R | t | Last 30d avg R |
+|---|---|---|---|---|---|---|---|
+| 1 | SUIUSDT | trend-204 (trend) | europe | 26 | +0.38 | 2.23 | +0.21 |
+
+The bot trades the first of these whose signal fires; one trade per day.
 
 ## How the selection procedure itself has done (out of sample, 1% risk per trade)
 

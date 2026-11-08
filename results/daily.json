@@ -1,7 +1,7 @@
 {
  "plan": {
-  "day": "2026-11-08",
-  "made_at": "2026-11-07 22:45:34.339153+00:00",
+  "day": "2026-11-09",
+  "made_at": "2026-11-08 22:45:36.546174+00:00",
   "select": {
    "train": 90,
    "gap_val": 30,
@@ -10,7 +10,25 @@
    "min_val": 5,
    "min_coins": 3
   },
-  "candidates": [],
+  "candidates": [
+   {
+    "variant": "trend-204",
+    "sym": "SUIUSDT",
+    "params": {
+     "family": "trend",
+     "session": "europe",
+     "ret_min": 0.03,
+     "atr_k": 1.0,
+     "tp_r": 1.0,
+     "id": "trend-204"
+    },
+    "n_train": 26,
+    "mean_train": 0.379,
+    "t_train": 2.23,
+    "n_val": 12,
+    "mean_val": 0.211
+   }
+  ],
   "tested": 1812
  },
  "wf90": {
