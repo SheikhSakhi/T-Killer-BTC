@@ -1,0 +1,32 @@
+{
+ "day": "2026-11-11",
+ "made_at": "2026-11-10 22:45:38.400323+00:00",
+ "select": {
+  "train": 90,
+  "gap_val": 30,
+  "t_req": 2.0,
+  "min_train": 15,
+  "min_val": 5,
+  "min_coins": 3
+ },
+ "candidates": [
+  {
+   "variant": "trend-204",
+   "sym": "SUIUSDT",
+   "params": {
+    "family": "trend",
+    "session": "europe",
+    "ret_min": 0.03,
+    "atr_k": 1.0,
+    "tp_r": 1.0,
+    "id": "trend-204"
+   },
+   "n_train": 27,
+   "mean_train": 0.397,
+   "t_train": 2.41,
+   "n_val": 13,
+   "mean_val": 0.107
+  }
+ ],
+ "tested": 1812
+}
