@@ -64,3 +64,6 @@ Read this first in every session. Newest entries at the bottom of each section.
   refuses to write a bool into it (TypeError). Tests never round-tripped the log through CSV. Fix: hits stored as
   1.0/0.0; test_log_survives_a_round_trip_through_csv reproduces the server error on the old code.
   Gmail 587 fallback still unverified (07:01 crashed before the email).
+- 08:01: hour completed end to end (no crash). Email failed on BOTH 465 and 587 with an immediate
+  "Connection unexpectedly closed": outbound SMTP from the Oracle VM is cut. Added notify.brevo (HTTPS API,
+  api.brevo.com, free 300/day); used when BREVO_API_KEY is in /opt/tkiller/.env. Owner must add the key on the server.

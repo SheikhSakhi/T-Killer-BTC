@@ -16,9 +16,22 @@ def telegram(text):
     return r.ok
 
 
+def brevo(subject, body, sender, to):
+    """Email over HTTPS (api.brevo.com), for servers whose outbound SMTP is cut. Free plan: 300 emails a day.
+    The sender address must be verified once in Brevo (Senders, Domains & Dedicated IPs → Senders)."""
+    r = requests.post("https://api.brevo.com/v3/smtp/email", timeout=30,
+                      headers={"api-key": os.environ["BREVO_API_KEY"], "accept": "application/json"},
+                      json=dict(sender=dict(email=sender), to=[dict(email=to)], subject=subject, textContent=body))
+    if not r.ok:
+        raise OSError(f"brevo {r.status_code}: {r.text[:200]}")
+    return True
+
+
 def email(subject, body):
     user, pwd = os.environ.get("GMAIL_USER"), os.environ.get("GMAIL_APP_PASSWORD")
     to = os.environ.get("ALERT_EMAIL_TO") or user
+    if os.environ.get("BREVO_API_KEY") and user:
+        return brevo(subject, body, user, to)
     if not (user and pwd):
         return False
     msg = MIMEText(body, "plain", "utf-8")

@@ -46,3 +46,19 @@ def test_reports_both_ports_when_gmail_unreachable(monkeypatch):
     setup(monkeypatch, {465, 587})
     with pytest.raises(OSError, match="465.*587"):
         notify.email("s", "b")
+
+
+def test_brevo_is_used_when_its_key_is_set(monkeypatch):
+    setup(monkeypatch, {465, 587})
+    monkeypatch.setenv("BREVO_API_KEY", "k")
+    calls = []
+
+    class Ok:
+        ok = True
+
+    def post(url, **kw):
+        calls.append((url, kw["json"]["to"][0]["email"], kw["headers"]["api-key"]))
+        return Ok()
+    monkeypatch.setattr(notify.requests, "post", post)
+    assert notify.email("s", "b") is True
+    assert calls == [("https://api.brevo.com/v3/smtp/email", "bot@example.com", "k")] and FakeSMTP.sent == []
