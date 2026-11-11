@@ -134,3 +134,19 @@ def test_email_failure_does_not_lose_the_hour(monkeypatch, tmp_path):
                                                          "close_to", "move", "hit", "hit_frozen", "hit_base"]),
                               R.index[-1], email=True)
     assert len(log) == 1 and "smtp down" in open(H.ERRORS).read()
+
+
+def test_log_survives_a_round_trip_through_csv(tmp_path):
+    """The server reloads log.csv every hour: an all-empty 'hit' column comes back as float."""
+    R = raw()
+    X = H.features(R)
+    y = (R["close"].shift(-1) > R["close"]).astype(float).where(R["close"].shift(-1).notna())
+    m = H.init_model(X.iloc[:300], y.iloc[:300])
+    log = pd.DataFrame(columns=["hour", "p_up", "p_frozen", "base_up", "close_from", "close_to", "move", "hit",
+                                "hit_frozen", "hit_base"])
+    path = tmp_path / "log.csv"
+    for t in R.index[320:324]:
+        log, subj, body = H.cycle(R.loc[:t], m, log, t, email=False)
+        log.to_csv(path, index=False)
+        log = pd.read_csv(path)
+    assert log["hit"].notna().sum() == 3 and "СЧЁТ" in body

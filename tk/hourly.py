@@ -481,9 +481,9 @@ def cycle(R, m, log, t_last, email=True):
         c0, c1 = R.loc[prev, "close"], R.loc[t_last, "close"]
         move = c1 / c0 - 1
         log.loc[i, ["close_from", "close_to", "move"]] = [c0, c1, move]
-        log.loc[i, "hit"] = bool((log.loc[i, "p_up"] >= 0.5) == (move > 0))
-        log.loc[i, "hit_frozen"] = bool((log.loc[i, "p_frozen"] >= 0.5) == (move > 0))
-        log.loc[i, "hit_base"] = bool((log.loc[i, "base_up"] == 1) == (move > 0))
+        log.loc[i, "hit"] = float((log.loc[i, "p_up"] >= 0.5) == (move > 0))
+        log.loc[i, "hit_frozen"] = float((log.loc[i, "p_frozen"] >= 0.5) == (move > 0))
+        log.loc[i, "hit_base"] = float((log.loc[i, "base_up"] == 1) == (move > 0))
         _, c_prev = predict(m, X.loc[prev].values)          # the inputs behind last hour's forecast, old weights
         prev_info = dict(contrib=c_prev)
         drivers = hour_drivers(t_last)                        # minute-by-minute: what moved the price in that hour

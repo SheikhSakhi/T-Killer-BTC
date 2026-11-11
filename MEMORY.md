@@ -60,3 +60,7 @@ Read this first in every session. Newest entries at the bottom of each section.
   `email failed: SMTPServerDisconnected('Connection unexpectedly closed')` on smtp.gmail.com:465 from the Oracle VM.
   So no hourly email ever arrived, and the daily XAU email probably failed too (notify.send swallows errors).
   Fix: notify.email falls back to 587 + STARTTLS; an auth error is raised at once (other port won't help).
+- 07:01: second server-only bug: log.csv reloaded with an all-NaN `hit` column comes back float64, and pandas 3
+  refuses to write a bool into it (TypeError). Tests never round-tripped the log through CSV. Fix: hits stored as
+  1.0/0.0; test_log_survives_a_round_trip_through_csv reproduces the server error on the old code.
+  Gmail 587 fallback still unverified (07:01 crashed before the email).
