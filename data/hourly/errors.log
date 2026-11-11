@@ -1,1 +1,45 @@
 2026-11-11 06:01 email failed: SMTPServerDisconnected('Connection unexpectedly closed')
+2026-11-11 07:01 hour failed:
+Traceback (most recent call last):
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/internals/blocks.py", line 1179, in setitem
+    casted = np_can_hold_element(values.dtype, value)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/dtypes/cast.py", line 1859, in np_can_hold_element
+    raise LossySetitemError
+pandas.errors.LossySetitemError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/tkiller/tk/hourly.py", line 566, in main
+    run_hour()
+  File "/opt/tkiller/tk/hourly.py", line 581, in run_hour
+    log, subj, body = cycle(R, m, log, t_last)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tkiller/tk/hourly.py", line 484, in cycle
+    log.loc[i, "hit"] = bool((log.loc[i, "p_up"] >= 0.5) == (move > 0))
+    ~~~~~~~^^^^^^^^^^
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/indexing.py", line 1010, in __setitem__
+    iloc._setitem_with_indexer(indexer, value, self.name)
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/indexing.py", line 2651, in _setitem_with_indexer
+    self._setitem_with_indexer_split_path(indexer, value, name)
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/indexing.py", line 2741, in _setitem_with_indexer_split_path
+    self._setitem_single_column(loc, value, pi)
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/indexing.py", line 2898, in _setitem_single_column
+    self.obj._mgr.column_setitem(loc, plane_indexer, value)
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 1568, in column_setitem
+    new_mgr = col_mgr.setitem((idx,), value)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 625, in setitem
+    return self.apply("setitem", indexer=indexer, value=value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/internals/managers.py", line 456, in apply
+    applied = getattr(b, f)(**kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/internals/blocks.py", line 1182, in setitem
+    nb = self.coerce_to_target_dtype(value, raise_on_upcast=True)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tkiller/.venv/lib/python3.12/site-packages/pandas/core/internals/blocks.py", line 484, in coerce_to_target_dtype
+    raise TypeError(f"Invalid value '{other}' for dtype '{self.values.dtype}'")
+TypeError: Invalid value 'False' for dtype 'float64'
+
