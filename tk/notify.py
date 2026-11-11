@@ -23,10 +23,20 @@ def email(subject, body):
         return False
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"], msg["From"], msg["To"] = subject, user, to
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
-        s.login(user, pwd)
-        s.sendmail(user, [to], msg.as_string())
-    return True
+    errors = []
+    for port in (465, 587):         # 465 = SSL from the start; 587 = plain then STARTTLS (some hosts cut one of them)
+        try:
+            with (smtplib.SMTP_SSL if port == 465 else smtplib.SMTP)("smtp.gmail.com", port, timeout=30) as s:
+                if port == 587:
+                    s.starttls()
+                s.login(user, pwd)
+                s.sendmail(user, [to], msg.as_string())
+            return True
+        except smtplib.SMTPAuthenticationError:
+            raise                   # wrong address or app password: another port will not help
+        except Exception as e:
+            errors.append(f"{port}: {e!r}")
+    raise OSError("gmail unreachable on both ports; " + "; ".join(errors))
 
 
 def send(subject, body, mail=True):

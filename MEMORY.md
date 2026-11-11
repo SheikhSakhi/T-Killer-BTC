@@ -56,3 +56,7 @@ Read this first in every session. Newest entries at the bottom of each section.
   gap between the archive copy and now is filled without wiping archive OI/ratios. Tests added.
 - XAU daily rule live record (archive prices): 10-27 short +2R (target 10-30), 11-01/11-03/11-05 shorts stopped (-3R),
   11-06 short still open. Net -1R before fees.
+- 06:01 run with the fix: log.csv and model.json saved for the first time. errors.log showed the real cause:
+  `email failed: SMTPServerDisconnected('Connection unexpectedly closed')` on smtp.gmail.com:465 from the Oracle VM.
+  So no hourly email ever arrived, and the daily XAU email probably failed too (notify.send swallows errors).
+  Fix: notify.email falls back to 587 + STARTTLS; an auth error is raised at once (other port won't help).
