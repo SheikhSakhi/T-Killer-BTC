@@ -95,3 +95,42 @@ def test_live_minutes_feed_the_model_and_the_hour_analysis(tmp_path, monkeypatch
     log, _, body = H.cycle(R.loc[:R.index[321]], m, log, R.index[321], email=False)
     assert m["live_hours"] >= 10
     assert "Что реально двигало цену" in body and "живой поток" in body
+
+
+def test_update_live_survives_failed_endpoints_and_keeps_archive(monkeypatch, tmp_path):
+    monkeypatch.setattr(H, "ERRORS", str(tmp_path / "errors.log"))
+    idx = pd.date_range("2026-01-01", periods=30, freq="1h")
+    R = pd.DataFrame({"close": 1.0, "high": 1.0, "low": 1.0, "quote_volume": 1.0, "taker_buy_quote": 0.5,
+                      "oi_value": 7.0, "top_ls_pos": 1.0, "global_ls_acc": 1.0, "taker_ls_vol": 1.0,
+                      "premium": 0.0}, index=idx)
+    ms = lambda t: int(t.value // 10**6)
+    bars = [[ms(t), "1", "2", "0.5", "1.5", "0", 0, "10", 0, 0, "5"] for t in idx[-5:].append(
+        pd.DatetimeIndex([idx[-1] + pd.Timedelta(hours=1)]))]
+
+    def fake_get(path, **kw):
+        if path == "/fapi/v1/klines":
+            return bars
+        raise RuntimeError("451")
+    monkeypatch.setattr(H, "_get", fake_get)
+    out = H.update_live(R)
+    assert out.loc[idx[-1], "close"] == 1.5            # live price replaces the archive bar
+    assert out.loc[idx[-1], "oi_value"] == 7.0         # archive OI is kept where the live call failed
+    assert len(out) == 31 and out["oi_value"].isna().sum() == 1
+    assert "openInterestHist" in open(H.ERRORS).read()
+
+
+def test_email_failure_does_not_lose_the_hour(monkeypatch, tmp_path):
+    from tk import notify
+    monkeypatch.setattr(H, "ERRORS", str(tmp_path / "errors.log"))
+
+    def boom(s, b):
+        raise OSError("smtp down")
+    monkeypatch.setattr(notify, "email", boom)
+    R = raw()
+    X = H.features_all(R)
+    y = (R["close"].shift(-1) > R["close"]).astype(float).where(R["close"].shift(-1).notna())
+    m = H.init_model(X.iloc[:-2], y.iloc[:-2])
+    log, subj, body = H.cycle(R, m, pd.DataFrame(columns=["hour", "p_up", "p_frozen", "base_up", "close_from",
+                                                         "close_to", "move", "hit", "hit_frozen", "hit_base"]),
+                              R.index[-1], email=True)
+    assert len(log) == 1 and "smtp down" in open(H.ERRORS).read()

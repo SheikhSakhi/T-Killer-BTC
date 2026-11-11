@@ -46,3 +46,13 @@ Read this first in every session. Newest entries at the bottom of each section.
 | 2026-10-29 | AUDIT of order-flow data (owner asked "is the data right?") | Found: (1) LOOKAHEAD — metrics (OI, L/S) were shifted −1h, so each hour saw the value from 55 min into the predicted hour; (2) last ~42 price hours came from testnet (synthetic volume); (3) October funding stale. Fixed all three; added tests/test_xau_flow_leak.py (corrupts the future, features before must not change; verified it fails on the old code). Clean rerun: hourly "similar situations" 52.0% → **50.3% (coin)**; ridge 49.6%; only "opposite of last hour" 51.7% (z 2.7, untradeable after costs). 24h single-feature ICs unchanged (book imbalance ±5% +0.21/+0.21). |
 | 2026-10-29 | tk/hourly.py: hourly forecast → check → online-logistic learning with a frozen copy as control, emailed hourly; replay 600 h | learning 47.6–50.4%, frozen 49–51% for L2 0.001…1.0; confident calls (≥55%) not better. Kept L2=1.0 so stated confidence (~52%) matches reality. Book depth logged live for later. |
 | 2026-10-29 | Hourly email redesigned with the owner: forecast first, then what moved the price last hour (live minute data), what the model learned, score. Added tk/collect.py (websocket: trades, top-20 book, liquidations, mark price; REST OI; one row per minute in cache/minutes) and 8 live features that join the model after 48 live hours. | built, tested on synthetic streams; not yet run against the live websocket (US hosts are blocked) |
+
+## 2026-11-11
+- Server live since ~2026-10-31, but the hourly learner never finished a cycle: 11 days of commits hold only
+  data/hourly/book.csv, no log.csv/model.json. Offline the full path (load, cycle x5, save) works, so the failure is
+  server-only (live REST or Gmail). Not visible from here: no server logs in the repo.
+- Fix: every failure now goes to data/hourly/errors.log (committed by run.sh); a failed live endpoint leaves its column
+  missing instead of killing the hour; an email failure no longer stops save(); klines limit 1000 + combine_first so a
+  gap between the archive copy and now is filled without wiping archive OI/ratios. Tests added.
+- XAU daily rule live record (archive prices): 10-27 short +2R (target 10-30), 11-01/11-03/11-05 shorts stopped (-3R),
+  11-06 short still open. Net -1R before fees.

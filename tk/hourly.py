@@ -195,28 +195,41 @@ def _get(path, **params):
 
 
 def _hourly_last(rows, key, field):
+    if not rows:
+        raise ValueError("empty answer")
     s = pd.Series({pd.to_datetime(int(x[key]), unit="ms"): float(x[field]) for x in rows}).sort_index()
     return s.resample("1h").last()          # the last 5-minute value inside bar [hh, hh+1)
 
 
+def _try(name, f, empty):
+    """One live endpoint; a failure leaves its column missing instead of stopping the hour."""
+    try:
+        return f()
+    except Exception as e:
+        note_error(f"live {name}: {e!r}")
+        return empty
+
+
 def update_live(R):
-    """Append the latest closed hours from the live API (same definitions as the archive)."""
-    k = _get("/fapi/v1/klines", interval="1h", limit=48)
+    """Append the latest closed hours from the live API (same definitions as the archive).
+    1000 bars of klines close any gap between the archive copy and now; the 5-minute series reach ~41 h."""
+    k = _get("/fapi/v1/klines", interval="1h", limit=1000)
     kl = pd.DataFrame([dict(t=pd.to_datetime(x[0], unit="ms"), close=float(x[4]), high=float(x[2]), low=float(x[3]),
                             quote_volume=float(x[7]), taker_buy_quote=float(x[10])) for x in k]).set_index("t")
     now = pd.Timestamp(datetime.now(timezone.utc)).tz_localize(None)
     kl = kl[kl.index + pd.Timedelta(hours=1) <= now]             # closed bars only
-    oi = _hourly_last(_get("/futures/data/openInterestHist", period="5m", limit=500), "timestamp", "sumOpenInterestValue")
-    top = _hourly_last(_get("/futures/data/topLongShortPositionRatio", period="5m", limit=500), "timestamp", "longShortRatio")
-    glob = _hourly_last(_get("/futures/data/globalLongShortAccountRatio", period="5m", limit=500), "timestamp", "longShortRatio")
-    tak = _hourly_last(_get("/futures/data/takerlongshortRatio", period="5m", limit=500), "timestamp", "buySellRatio")
-    pk = _get("/fapi/v1/premiumIndexKlines", interval="1h", limit=48)
-    prem = pd.Series({pd.to_datetime(x[0], unit="ms"): float(x[4]) for x in pk})
+    none = pd.Series(dtype=float)
+    five = lambda path, field: _try(path, lambda: _hourly_last(_get(path, period="5m", limit=500), "timestamp", field), none)
+    oi = five("/futures/data/openInterestHist", "sumOpenInterestValue")
+    top = five("/futures/data/topLongShortPositionRatio", "longShortRatio")
+    glob = five("/futures/data/globalLongShortAccountRatio", "longShortRatio")
+    tak = five("/futures/data/takerlongshortRatio", "buySellRatio")
+    prem = _try("premiumIndexKlines", lambda: pd.Series({pd.to_datetime(x[0], unit="ms"): float(x[4])
+                                                         for x in _get("/fapi/v1/premiumIndexKlines", interval="1h", limit=1000)}), none)
     new = kl.assign(oi_value=oi.reindex(kl.index), top_ls_pos=top.reindex(kl.index),
                     global_ls_acc=glob.reindex(kl.index), taker_ls_vol=tak.reindex(kl.index),
                     premium=prem.reindex(kl.index))
-    out = pd.concat([R, new])
-    return out[~out.index.duplicated(keep="last")].sort_index()
+    return new.combine_first(R).sort_index()      # live values win; archive values stay where live has none
 
 
 def log_book():
@@ -491,8 +504,24 @@ def cycle(R, m, log, t_last, email=True):
                                              hit_frozen=np.nan, hit_base=np.nan)])], ignore_index=True)
     if email:
         from tk import notify
-        notify.email(subj, body)
+        try:
+            if not notify.email(subj, body):
+                note_error("email not sent: GMAIL_USER or GMAIL_APP_PASSWORD missing in .env")
+        except Exception as e:                   # a mail failure must not lose the forecast and the learning
+            note_error(f"email failed: {e!r}")
     return log, subj, body
+
+
+ERRORS = os.path.join(DIR, "errors.log")
+
+
+def note_error(msg):
+    """Kept in the repo (data/hourly/errors.log) so a Claude session can see what failed on the server."""
+    os.makedirs(DIR, exist_ok=True)
+    stamp = pd.Timestamp(datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M")
+    with open(ERRORS, "a") as f:
+        f.write(f"{stamp} {msg}\n")
+    print("ERROR", msg, file=sys.stderr)
 
 
 def load():
@@ -533,6 +562,15 @@ def main():
         print(f"\nREPLAY {len(d)} hours: learning {d['hit'].astype(bool).mean():.1%}, frozen {d['hit_frozen'].astype(bool).mean():.1%}, "
               f"opposite-last-hour {d['hit_base'].astype(bool).mean():.1%}")
         return
+    try:
+        run_hour()
+    except Exception:
+        import traceback
+        note_error("hour failed:\n" + traceback.format_exc())
+        raise
+
+
+def run_hour():
     R, m, log = load()
     R = update_live(R)
     t_last = R.index[-1]
