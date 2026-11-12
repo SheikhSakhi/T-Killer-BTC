@@ -1,6 +1,6 @@
 {
- "day": "2026-11-12",
- "made_at": "2026-11-11 22:45:34.941350+00:00",
+ "day": "2026-11-13",
+ "made_at": "2026-11-12 22:45:37.675910+00:00",
  "select": {
   "train": 90,
   "gap_val": 30,
@@ -9,41 +9,6 @@
   "min_val": 5,
   "min_coins": 3
  },
- "candidates": [
-  {
-   "variant": "trend-204",
-   "sym": "SUIUSDT",
-   "params": {
-    "family": "trend",
-    "session": "europe",
-    "ret_min": 0.03,
-    "atr_k": 1.0,
-    "tp_r": 1.0,
-    "id": "trend-204"
-   },
-   "n_train": 27,
-   "mean_train": 0.397,
-   "t_train": 2.41,
-   "n_val": 14,
-   "mean_val": 0.019
-  },
-  {
-   "variant": "trend-206",
-   "sym": "XRPUSDT",
-   "params": {
-    "family": "trend",
-    "session": "europe",
-    "ret_min": 0.03,
-    "atr_k": 1.0,
-    "tp_r": 3.0,
-    "id": "trend-206"
-   },
-   "n_train": 20,
-   "mean_train": 0.937,
-   "t_train": 2.11,
-   "n_val": 5,
-   "mean_val": 0.001
-  }
- ],
+ "candidates": [],
  "tested": 1812
 }
