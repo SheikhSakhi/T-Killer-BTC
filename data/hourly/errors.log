@@ -196,3 +196,4 @@ TypeError: Invalid value 'False' for dtype 'float64'
 2026-11-17 14:01 email failed: OSError("gmail unreachable on both ports; 465: SMTPConnectError(421, b'4.4.5 Server busy, try again later. (mx.google.com)\\n4.4.5  For more information, go to\\n4.4.5  https://support.google.com/a/answer/3221692  - gsmtp'); 587: SMTPServerDisconnected('Connection unexpectedly closed')")
 2026-11-17 15:01 email failed: OSError("gmail unreachable on both ports; 465: SMTPServerDisconnected('Connection unexpectedly closed'); 587: SMTPServerDisconnected('Connection unexpectedly closed')")
 2026-11-17 16:01 email failed: OSError("gmail unreachable on both ports; 465: SMTPServerDisconnected('Connection unexpectedly closed'); 587: SMTPServerDisconnected('Connection unexpectedly closed')")
+2026-11-17 17:01 email failed: OSError("gmail unreachable on both ports; 465: SMTPServerDisconnected('Connection unexpectedly closed'); 587: SMTPServerDisconnected('Connection unexpectedly closed')")
