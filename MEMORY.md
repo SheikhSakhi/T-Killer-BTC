@@ -67,3 +67,10 @@ Read this first in every session. Newest entries at the bottom of each section.
 - 08:01: hour completed end to end (no crash). Email failed on BOTH 465 and 587 with an immediate
   "Connection unexpectedly closed": outbound SMTP from the Oracle VM is cut. Added notify.brevo (HTTPS API,
   api.brevo.com, free 300/day); used when BREVO_API_KEY is in /opt/tkiller/.env. Owner must add the key on the server.
+
+## 2026-11-27
+- Owner is LONG from 3787, no stop; did not take the trend-rule shorts. Wants signals from market forces, not trend.
+- Re-ran research/xau_flow.py IC table (n≈350 daily, ~1 year): only book_imb_5.0 (bid vs ask depth within 5%) is
+  clearly stable at 24h (IC +0.22 / +0.13). Top quintile (>0.21) → 64% up days, +0.25% avg; other quintiles ~flat.
+  It was top-quintile 11-20..11-22 right before the bounce 3549→3637. On 11-26 it was 0.06 (neutral).
+  Weak/contrarian: top-trader L/S z (−0.09/−0.06). Everything else unstable. 23 features × 2 horizons tested.
