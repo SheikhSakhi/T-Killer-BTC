@@ -16,6 +16,12 @@ Do not add "or" alternatives and do not override the rule with your own view. If
 is "testnet", say the owner should check the entry against the real Binance price. Commit the
 updated `data/xau/signals.csv` so the live record keeps accumulating.
 
+## Hourly model ("модель", "прогноз на час", "что на следующий час", "объясни письмо")
+Read `data/hourly/latest.md` (the last hourly email, word for word), the tail of `data/hourly/log.csv` (forecast vs
+fact per hour) and `data/hourly/errors.log`. Answer in Russian: the forecast for the next hour, what drove it, how the
+model has scored (last 24 h and all time vs the frozen copy and a coin), and what failed if anything. Do not run anything.
+If `latest.md` is older than 2 hours, the server or the hourly job stopped: say so and point to errors.log.
+
 ## Quick question from the owner ("что по рынку", "какое движение", "что сегодня")
 Read `LATEST.md` only and answer in Russian, briefly. Do not run anything. If `LATEST.md` is
 older than 36 hours, say the nightly job probably failed and point to the server logs.

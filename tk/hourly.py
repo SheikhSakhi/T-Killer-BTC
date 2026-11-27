@@ -593,6 +593,8 @@ def run_hour():
         return
     log_book()
     log, subj, body = cycle(R, m, log, t_last)
+    with open(os.path.join(DIR, "latest.md"), "w") as f:     # the same text as the email, readable in the repo
+        f.write(f"# {subj}\n\n```\n{body}\n```\n")
     save(R, m, log)
     print(subj)
     print(body)
