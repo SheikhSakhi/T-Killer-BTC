@@ -2,6 +2,22 @@
 
 Read this first in every session. Newest entries at the bottom of each section.
 
+## STATUS (rewrite this block whenever the picture changes; last: 2026-11-27 22:00 UTC)
+- Repo: github.com/SheikhSakhi/T-Killer-BTC (local clone /home/user/t-killer-btc in Claude sessions). This file is
+  Claude's long-term context: the chat context gets compressed, this file does not.
+- Server (Oracle, Frankfurt, /opt/tkiller) runs since 2026-10-31 without gaps: tk-collect (live XAUUSDT tape, minute
+  rows), tk-hourly (online logistic model, forecast next hour, every :01:30), tk-xau (daily 00:05), tk-daily, tk-live
+  (paper, 40 USDT coins). It pushes data/hourly/{log.csv,model.json,latest.md,errors.log,minutes/}.
+- EMAIL IS BROKEN: Oracle VM cannot reach Gmail SMTP (465 and 587 cut). Code supports Brevo (HTTPS); waiting for the
+  owner to put BREVO_API_KEY into /opt/tkiller/.env. Until then nothing reaches the owner.
+- Results so far: hourly direction model 50.3% over 394 h (coin). Tape patterns (20 tests): nothing stable.
+  10-minute GBM walk-forward on 39k minutes: direction = base rate (52% = "always down" in a falling month), no gain;
+  BUT it foresees big 10-min moves (top-2% scores: 2–4x the base rate of a ≥0.15% move) without knowing the side.
+  Avg |10-min move| 0.081% ≈ taker round trip 0.08%: 10-minute direction trading cannot pay taker fees.
+- Owner: long XAUUSDT from 3787 with no stop (as of 11-27). Wants a self-learning model, hourly/10-min, email alerts
+  only when the model is confident by its own track record, and Claude able to explain it from this repo.
+- Next: sentinel service (every minute, nightly walk-forward retrain, alerts gated by out-of-sample record).
+
 ## Facts established
 - 2026-10-21..23: Kronos-small (price-only foundation model) has no 24h edge on BTC: 49.4% direction
   over 180 windows, toy strategy −40.6%; agreement filter made it worse; its band width tracks
@@ -84,3 +100,7 @@ Read this first in every session. Newest entries at the bottom of each section.
   Re-run when the tape is 3+ months. Collector quirk: a late trade can write a second row for the same minute;
   aggregate by minute when reading.
   Tried: +20 (tape ideas). Running count must include these.
+- 2026-11-27 research/xau_10min.py: 34 tape features per minute, HistGradientBoosting, walk-forward by day,
+  next-10-min direction: hit 52.3%/51.7% by half = base rate (47.8% of windows were up); avg gain ≈ 0, −0.08% after
+  cost. Big-move targets (≥0.15%, ≥0.30% up/down): top-2% scores have 2–4x base precision in both halves but avg
+  gain in the named direction is negative → it predicts volatility, not side. Tried: +6 (direction, 4 big-move).

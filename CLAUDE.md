@@ -1,5 +1,8 @@
 # T-Killer: instructions for Claude
 
+In every session read `MEMORY.md` first (its STATUS block is the current picture), and after any work
+update STATUS and append a dated note, so the next session (or this one after compression) keeps the context.
+
 ## What this repo is
 A small-stake (40 USDT) Binance USD-M futures system. The server (Oracle VM, Frankfurt) runs:
 - `deploy/run.sh live` every minute: `tk/live.py` trades today's plan, one trade per UTC day, flat by 22:30 UTC.

@@ -4,3 +4,4 @@ pyarrow
 requests
 pytest
 websockets
+scikit-learn
