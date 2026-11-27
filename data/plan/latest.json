@@ -1,6 +1,6 @@
 {
- "day": "2026-11-27",
- "made_at": "2026-11-26 22:45:37.793981+00:00",
+ "day": "2026-11-28",
+ "made_at": "2026-11-27 22:45:39.327794+00:00",
  "select": {
   "train": 90,
   "gap_val": 30,
@@ -21,11 +21,28 @@
     "tp_r": 3.0,
     "id": "trend-206"
    },
+   "n_train": 30,
+   "mean_train": 0.776,
+   "t_train": 2.36,
+   "n_val": 13,
+   "mean_val": 0.132
+  },
+  {
+   "variant": "trend-208",
+   "sym": "SUIUSDT",
+   "params": {
+    "family": "trend",
+    "session": "europe",
+    "ret_min": 0.03,
+    "atr_k": 2.0,
+    "tp_r": 2.0,
+    "id": "trend-208"
+   },
    "n_train": 29,
-   "mean_train": 0.844,
-   "t_train": 2.53,
-   "n_val": 14,
-   "mean_val": 0.038
+   "mean_train": 0.449,
+   "t_train": 2.08,
+   "n_val": 13,
+   "mean_val": 0.031
   }
  ],
  "tested": 1812
