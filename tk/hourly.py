@@ -562,12 +562,26 @@ def main():
         print(f"\nREPLAY {len(d)} hours: learning {d['hit'].astype(bool).mean():.1%}, frozen {d['hit_frozen'].astype(bool).mean():.1%}, "
               f"opposite-last-hour {d['hit_base'].astype(bool).mean():.1%}")
         return
+    sync_minutes()
     try:
         run_hour()
     except Exception:
         import traceback
         note_error("hour failed:\n" + traceback.format_exc())
         raise
+
+
+def sync_minutes(src=None, dst=None):
+    """Copy the collector's minute files into the repo (data/hourly/minutes) so a Claude session can study them."""
+    import shutil
+    src, dst = src or MIN_DIR, dst or os.path.join(DIR, "minutes")
+    if not os.path.isdir(src):
+        return
+    os.makedirs(dst, exist_ok=True)
+    for f in sorted(os.listdir(src)):
+        a, b = os.path.join(src, f), os.path.join(dst, f)
+        if f.endswith(".csv") and (not os.path.exists(b) or os.path.getsize(b) != os.path.getsize(a)):
+            shutil.copyfile(a, b)
 
 
 def run_hour():

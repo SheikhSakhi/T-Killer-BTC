@@ -150,3 +150,14 @@ def test_log_survives_a_round_trip_through_csv(tmp_path):
         log.to_csv(path, index=False)
         log = pd.read_csv(path)
     assert log["hit"].notna().sum() == 3 and "СЧЁТ" in body
+
+
+def test_sync_minutes_copies_new_and_grown_files(tmp_path):
+    src, dst = tmp_path / "cache", tmp_path / "repo"
+    src.mkdir()
+    (src / "2026-11-01.csv").write_text("a\n")
+    H.sync_minutes(str(src), str(dst))
+    (src / "2026-11-01.csv").write_text("a\nb\n")
+    (src / "2026-11-02.csv").write_text("c\n")
+    H.sync_minutes(str(src), str(dst))
+    assert (dst / "2026-11-01.csv").read_text() == "a\nb\n" and (dst / "2026-11-02.csv").exists()

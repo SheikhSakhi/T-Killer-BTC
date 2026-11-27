@@ -74,3 +74,6 @@ Read this first in every session. Newest entries at the bottom of each section.
   clearly stable at 24h (IC +0.22 / +0.13). Top quintile (>0.21) → 64% up days, +0.25% avg; other quintiles ~flat.
   It was top-quintile 11-20..11-22 right before the bounce 3549→3637. On 11-26 it was 0.06 (neutral).
   Weak/contrarian: top-trader L/S z (−0.09/−0.06). Everything else unstable. 23 features × 2 horizons tested.
+- Hourly learner live record: 394 scored hours, 50.3% (frozen 49.0%, opposite-last-hour 48.5%); 651 live minute hours
+  in the model. Collector works. Minute files now copied to data/hourly/minutes each hour (sync_minutes) so the
+  owner's hypothesis (intra-hour dynamics: absorption, liquidation cascades, walls) can be tested on real tape.
