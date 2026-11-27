@@ -77,3 +77,10 @@ Read this first in every session. Newest entries at the bottom of each section.
 - Hourly learner live record: 394 scored hours, 50.3% (frozen 49.0%, opposite-last-hour 48.5%); 651 live minute hours
   in the model. Collector works. Minute files now copied to data/hourly/minutes each hour (sync_minutes) so the
   owner's hypothesis (intra-hour dynamics: absorption, liquidation cascades, walls) can be tested on real tape.
+- 19:45 live-tape test (research/xau_tape.py, results/xau_tape_ic.csv): 651 hours of collector minutes
+  (2026-10-31..11-27). 10 intra-hour ideas × 2 horizons = 20 tests (flow, flow_last15, absorb, big, liq, book5_end,
+  book20_avg, book_chg, oi_price, prem_chg → next 1h, 4h). None stable (sign kept in both halves and |IC| ≥ 2 SE).
+  Closest: book_chg at 1h, −0.066/−0.058 (same sign, too small). 4h has n=162, so only |IC| ≳ 0.15 is detectable.
+  Re-run when the tape is 3+ months. Collector quirk: a late trade can write a second row for the same minute;
+  aggregate by minute when reading.
+  Tried: +20 (tape ideas). Running count must include these.
